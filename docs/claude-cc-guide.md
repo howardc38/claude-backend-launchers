@@ -8,9 +8,10 @@
 
 > **增補（2026-06-09）**：本 repo 另外加入咗 **MiMo 直連 launcher**，唔經 `claude-code-proxy`，直接用 Anthropic-compatible endpoint 跑 Claude Code。以下內容會同時保留：
 > - OpenAI / Codex via `claude-code-proxy`
-> - Kimi via `claude-code-proxy`
 > - MiMo direct via `mimo-claude`
 > - 原生 Anthropic via `claude`
+>
+> **增補（2026-06-13 覆核）**：原生 `claude` 現行 flagship 已係 **Opus 4.8**（`claude-opus-4-8`，1M context 預設），取代 Opus 4.7。`claude-code-proxy` upstream 最新為 **v0.0.18**（新增 Cursor provider 等）；本機仍裝 **v0.0.12**，以下 proxy 內容按**已安裝版本**描述（未升級）。
 
 ---
 
@@ -20,7 +21,6 @@
 |---|---|---|---|---|
 | `claude` | 原生 Anthropic | 你本機 Claude Code 預設 | 由 Anthropic / Claude Code 原生處理 | Claude Code 原生 |
 | `claude-cc` | OpenAI Codex via proxy | `gpt-5.4[1m]` | proxy 會 strip `[1m]` 再送上游；Claude Code 用它調高 auto-compact threshold | `low/medium/high/max` 經 proxy 映射；`max -> xhigh` |
-| `claude-cc` + `CCP_ALIAS_PROVIDER=kimi` | Kimi via proxy | `kimi-for-coding` / `kimi-k2.6` alias | 無 `[1m]` 慣例；Kimi 文檔路徑為主 | `max -> high`，其餘 pass-through |
 | `mimo-claude` | MiMo direct（Anthropic-compatible） | `mimo-v2.5-pro[1m]`（本機 launcher 目前設定） | `[1m]` 交由 Claude Code / MiMo 配置慣例處理，用來打開長 context 模式 | **無本地 custom mapping**；Claude Code 的 effort 直接 pass-through |
 
 **最實用理解：**
@@ -131,7 +131,7 @@ cd /Users/howard/Projects/claude-backend-launchers
 | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | `mimo-v2.5-pro[1m]` |
 | `ANTHROPIC_SMALL_FAST_MODEL` | `mimo-v2.5-pro[1m]` |
 
-> 備註：Xiaomi 官方 Claude Code 設定文檔用嘅示例 model 名係 `mimo-v2.5-pro` / `mimo-v2.5-pro[1m]`；本機 launcher 已改為跟官方 literal。
+> 備註：Xiaomi 官方例子用嘅 model 名係淨 `mimo-v2.5-pro`；`[1m]` 係 Claude Code CLI 慣例（見下面「MiMo 版本點理解 `[1m]`」），本機 launcher 預設帶 `[1m]` 屬無害，可用 `MIMO_MODEL=mimo-v2.5-pro` 覆寫。
 
 ---
 
@@ -156,16 +156,6 @@ cd /Users/howard/Projects/claude-backend-launchers
 | medium | medium |
 | high | high |
 | **max** | **xhigh** ⭐ |
-
-**Kimi provider 嘅 mapping**（從 binary 另一個 `mapReasoningEffort` function 確認）：
-
-| Claude Code 寄 | Proxy 轉換 → Kimi |
-|----------------|-------------------|
-| low | low |
-| medium | medium |
-| high | high |
-| max | **high**（Kimi 冇 xhigh，封頂 high）|
-| 冇 effort | medium（默認） |
 
 ### Per-agent effort 控制
 
@@ -199,18 +189,14 @@ cd /Users/howard/Projects/claude-backend-launchers
 | `XDG_STATE_HOME` | — | `~/.local/state` | `proxy.log` 嘅 base dir |
 | `CCP_LOG_STDERR` | `log.stderr` | unset | =1 mirror log line 到 stderr |
 | `CCP_LOG_VERBOSE` | `log.verbose` | unset | =1 log 完整 request/response + 每個 SSE event |
-| `CCP_ALIAS_PROVIDER` | `aliasProvider` | `codex` | 將 Anthropic alias (haiku/sonnet/opus/claude-\*) route 去 `codex` 定 `kimi` |
 | `CCP_CODEX_EFFORT` | `codex.effort` | unset | **強制覆寫** Codex reasoning effort：`none / low / medium / high / xhigh` |
 | `CCP_CODEX_MODEL` | `codex.model` | unset | 強制所有 Codex request 用呢個 model（無視 Claude Code 寄咩） |
 | `CCP_CODEX_SERVICE_TIER` | `codex.serviceTier` | unset | 強制 Codex service tier：`fast` / `priority`（=fast 上游）/ `flex` |
 | `CCP_CODEX_BASE_URL` | `codex.baseUrl` | `https://chatgpt.com/backend-api/codex/responses` | Codex endpoint override（debug 用） |
 | `CCP_CODEX_ORIGINATOR` | `codex.originator` | `claude-code-proxy` | `originator` header |
 | `CCP_CODEX_USER_AGENT` | `codex.userAgent` | `claude-code-proxy/<ver>` | User-Agent header |
-| `CCP_KIMI_OAUTH_HOST` | `kimi.oauthHost` | `https://auth.kimi.com` | Kimi OAuth host override |
-| `CCP_KIMI_BASE_URL` | `kimi.baseUrl` | `https://api.kimi.com/coding/v1` | Kimi API base URL |
-| `CCP_KIMI_USER_AGENT` | `kimi.userAgent` | `KimiCLI/1.37.0` | Kimi User-Agent |
 | `CCP_ORIGINATOR` | — | `claude-code-proxy` | `CCP_CODEX_ORIGINATOR` 嘅 fallback |
-| `CCP_USER_AGENT` | — | unset | `CCP_CODEX_USER_AGENT` 同 `CCP_KIMI_USER_AGENT` 嘅 fallback |
+| `CCP_USER_AGENT` | — | unset | `CCP_CODEX_USER_AGENT` 嘅 fallback |
 
 我預設**冇 set** 任何 proxy override env vars — 全部行 default + Claude Code 嗰邊（settings.json / agent frontmatter）控制。
 
@@ -272,7 +258,6 @@ ANTHROPIC_MODEL='mimo-v2.5-pro[1m]' mimo-claude
 |---|---|
 | Anthropic 原生 | `claude` 入面 `/model`，或者本機 Claude Code 設定 |
 | OpenAI / Codex via proxy | `ANTHROPIC_MODEL='gpt-5.4-mini[1m]' claude-cc`、`/model` |
-| Kimi via proxy | 改 proxy route / provider config |
 | MiMo direct | `MIMO_MODEL='mimo-v2.5-pro[1m]' mimo-claude` 或修改 `scripts/claude-mimo.sh` |
 
 ### Plus tier 確認可用嘅 model（官方）
@@ -304,8 +289,7 @@ ANTHROPIC_MODEL='gpt-5.4-fast[1m]' claude-cc
 ### 完整 model list（`claude-code-proxy --help` 印出來）
 
 - **Codex provider**：`gpt-5.2` / `gpt-5.3-codex` / `gpt-5.3-codex-spark` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.5`（每個都有 `-fast` 變體）
-- **Anthropic aliases**：`haiku` / `sonnet` / `opus` / `claude-haiku-4-5` / `claude-haiku-4-5-20251001` / `claude-sonnet-4-6` / `claude-opus-4-7` — **預設 route 去 Codex**，可以用 `CCP_ALIAS_PROVIDER=kimi` 改為 route 去 Kimi
-- **Kimi provider**：`kimi-for-coding` / `kimi-k2.6` / `k2.6`（後兩個係 alias）— Kimi 只有一個 wire model（`kimi-for-coding`，display name 係 Kimi-k2.6），256K context
+- **Anthropic aliases**：`haiku` / `sonnet` / `opus` / `claude-haiku-4-5` / `claude-haiku-4-5-20251001` / `claude-sonnet-4-6` / `claude-opus-4-7` — **預設 route 去 Codex**
 
 ---
 
@@ -333,18 +317,16 @@ function normalizeIncomingModel(model) {
 | GPT-5.4 native API | 1.05M (922K in + 128K out) — 要 explicit opt-in `model_context_window`，否則 272K | [OpenAI API docs](https://developers.openai.com/api/docs/models/gpt-5.4) |
 | **GPT-5.4 via Codex (ChatGPT Plus/Pro)** | **400K+** | [claude-code-proxy README](https://github.com/raine/claude-code-proxy#5-context-window-size) |
 | GPT-5.5 via Codex | 400K cap（feature request to raise — [issue #19464](https://github.com/openai/codex/issues/19464)） | OpenAI Codex GitHub |
-| Kimi-k2.6 | 256K | claude-code-proxy README |
 
 > ⚠️ **Caveat**：[OpenAI Codex Discussion #1999](https://github.com/openai/codex/discussions/1999) 入面有 user 觀察到 192K-272K，但係 thread 入面亦有人指出個 number 反映 billing 唔係 actual allocation。Proxy README（作者親自寫）話 GPT-5.4 via Codex 至少 400K。
 
 ### MiMo 版本點理解 `[1m]`
 
-根據 Xiaomi 官方文檔：
+- `mimo-v2.5-pro` **原生支援 1M context window**（Xiaomi 官方文檔）
+- `[1m]` 本質上係 **Claude Code CLI 嘅 client-side 慣例**：append 落 model id 用嚟調高 auto-compact threshold（趨向 1M token），由 CLI 自己處理 —— **唔係 Xiaomi 文檔規定嘅後綴**
+- ⚠️ **覆核（2026-06-13）**：可讀到嘅 Xiaomi 官方例子同第三方配置指南（DevTk 等）都用**淨** id `mimo-v2.5-pro`，冇 `[1m]`。所以唔好當 `[1m]` 係「Xiaomi 官方接受的慣例」。
 
-- `mimo-v2.5-pro` 支援 **1M context window**
-- Claude Code 配置頁明確寫咗：對支援 1M context 嘅 MiMo model，可以喺 model ID 後面加 `[1m]`
-
-所以對 MiMo 來講，`[1m]` 至少係一個**官方接受的 Claude Code 配置慣例**。本機 `mimo-claude` 因此預設已帶 `[1m]`。  
+本機 `mimo-claude` 預設帶 `[1m]` 係**無害**做法（CLI 客戶端處理，MiMo 原生 1M context）；如某個 Claude Code CLI build 唔收 bracketed id，用 `MIMO_MODEL=mimo-v2.5-pro mimo-claude` 即可 fallback。  
 來源：
 
 - [Claude Code Configuration](https://platform.xiaomimimo.com/docs/integration/claudecode)
@@ -356,8 +338,7 @@ function normalizeIncomingModel(model) {
 |---|---|---|---|
 | Anthropic 原生 | 跟 Anthropic / Claude Code 原生行為 | 以官方 Claude / Anthropic 文檔為準 | 原生 |
 | OpenAI Codex via proxy | Claude Code auto-compact hint；proxy strip 後送上游 | `gpt-5.4` via Codex 實測 / README 約 400K+ | `max -> xhigh` |
-| Kimi via proxy | 無主要依賴 `[1m]` | Kimi 文檔 / proxy README：256K | `max -> high` |
-| MiMo direct | 官方接受 `[1m]` 作為 Claude Code 長 context 配置慣例 | Xiaomi 文檔：`mimo-v2.5-pro` context window 1M | **無本地 custom mapping，pass-through** |
+| MiMo direct | `[1m]` 係 Claude Code CLI client-side 慣例（非 Xiaomi 規定） | Xiaomi 文檔：`mimo-v2.5-pro` 原生 1M context window | **無本地 custom mapping，pass-through** |
 
 ### 用法 implication
 
@@ -370,7 +351,7 @@ function normalizeIncomingModel(model) {
 - 🛡️ 保守做法：
   1. 喺 chat 入面打 `/compact` 命令手動壓縮
   2. 唔加 `[1m]` 直接用 `ANTHROPIC_MODEL='gpt-5.4' claude-cc`，等 Claude Code 用 200K 默認 threshold 提早 compact
-  3. 大型 task 用返 native Anthropic（`claude` 行 Opus 4.7 — 真係 1M context）
+  3. 大型 task 用返 native Anthropic（`claude` 行 Opus 4.8 — 1M context，Claude API 預設）
 
 **完全停掉 auto-compact**：
 
@@ -403,28 +384,18 @@ tail -f ~/.local/state/claude-code-proxy/proxy.log | grep -iE 'context|too.long|
 `status` 輸出例子（macOS）：
 ```
 Account: 010e864f-c430-48e5-8744-9e076ecc4b75
-Expires: 2026-05-23T05:47:30.970Z (in 863104s)
+Expires: <ISO-8601 timestamp> (in <N>s)
 Storage: macOS Keychain
 ```
 
 Token auto-refresh：access token expire 前 5 分鐘 proxy 會自動 refresh，有 single-flight guard 防 stampede。
 
-### Kimi auth 命令（如果你想用 kimi.com）
-
-| 命令 | 作用 |
-|------|------|
-| `claude-cc-proxy kimi auth login` | Device-code flow，印 URL + code |
-| `claude-cc-proxy kimi auth status` | 睇 user ID + expiry + scope + storage |
-| `claude-cc-proxy kimi auth logout` | 清 stored credentials |
-
-Kimi access token 只 ~15 分鐘 expire，proxy 同樣自動 refresh。Kimi 嘅 device_id 喺 `~/.config/claude-code-proxy/kimi/device_id`，bound 入個 JWT，**唔好亂刪**。
-
 ### Token 存放位置
 
-| 平台 | Codex token | Kimi token |
-|------|------------|-----------|
-| **macOS** | Keychain service `claude-code-proxy.codex` | Keychain service `claude-code-proxy.kimi` |
-| Linux/其他 | `~/.config/claude-code-proxy/codex/auth.json` (mode 0600) | `~/.config/claude-code-proxy/kimi/auth.json` (mode 0600) |
+| 平台 | Codex token |
+|------|------------|
+| **macOS** | Keychain service `claude-code-proxy.codex` |
+| Linux/其他 | `~/.config/claude-code-proxy/codex/auth.json` (mode 0600) |
 
 ### MiMo key 存放位置（本 repo launcher）
 
@@ -495,7 +466,6 @@ Schema 例子（所有 key 都 optional）：
 ```json
 {
   "port": 18765,
-  "aliasProvider": "codex",
   "codex": {
     "originator": "claude-code-proxy",
     "userAgent": "claude-code-proxy/dev",
@@ -503,11 +473,6 @@ Schema 例子（所有 key 都 optional）：
     "effort": "xhigh",
     "serviceTier": "fast",
     "baseUrl": "https://chatgpt.com/backend-api/codex/responses"
-  },
-  "kimi": {
-    "userAgent": "KimiCLI/1.37.0",
-    "oauthHost": "https://auth.kimi.com",
-    "baseUrl": "https://api.kimi.com/coding/v1"
   },
   "log": {
     "stderr": false,
@@ -648,33 +613,7 @@ rm ccp.tar.gz ccp.sha256
 
 ## 🗑️ Uninstall
 
-### 移除 Gemini mux 試裝（`claude-code-mux` / `ccm-start` / `gemini-claude`）
-
-如果你想**完整移除**今次試過的 Gemini proxy / mux 路線，按以下順序做：
-
-```sh
-# 1. 停掉本機 mux（如果仲跑緊）
-ccm stop 2>/dev/null || true
-pkill -f '/Users/howard/.local/bin/ccm start' 2>/dev/null || true
-
-# 2. 刪 user-level commands
-rm -f ~/.local/bin/ccm
-rm -f ~/.local/bin/ccm-start
-rm -f ~/.local/bin/gemini-claude
-
-# 3. 刪本機 mux state / OAuth tokens / config
-rm -rf ~/.claude-code-mux
-```
-
-驗證：
-
-```sh
-which ccm ccm-start gemini-claude 2>/dev/null
-# 預期：（無 output）
-
-ls ~/.claude-code-mux 2>/dev/null
-# 預期：No such file or directory
-```
+### 移除 claude-code-proxy + MiMo launcher
 
 ```sh
 # 1. 殺 proxy
@@ -691,7 +630,6 @@ rm ~/.local/bin/claude-cc-proxy
 
 # 4. 清 macOS Keychain credentials（重要！rm -rf ~/.config 唔會清呢個）
 security delete-generic-password -s "claude-code-proxy.codex"  2>/dev/null || true
-security delete-generic-password -s "claude-code-proxy.kimi"   2>/dev/null || true
 
 # 5. 清 config / log / 殘留 file-based auth（Linux 嘅 path，macOS 通常空）
 rm -rf ~/.config/claude-code-proxy
@@ -714,23 +652,19 @@ which claude-code-proxy claude-cc claude-cc-proxy 2>/dev/null
 ## ⚠️ 重要 caveat / limitations（官方）
 
 ### 1. Terms of Service gray area
-README 明文：用非官方 client 連 Codex/Kimi backend 係 **gray area**，"**use at your own risk**"。建議：
+README 明文：用非官方 client 連 Codex backend 係 **gray area**，"**use at your own risk**"。建議：
 - 用次要 ChatGPT account 試
 - 唔好放生產 code / 客戶資料 / secrets 落去
 - 純試 / 個人項目用
 
 ### 2. Rate limit 共享
-你個 ChatGPT account quota 同所有 client（網頁版、ChatGPT app、proxy）共享。Codex 嘅 `codex.rate_limits.limit_reached` 同 Kimi 嘅 HTTP 429 都會 surface 做 HTTP 429 + `retry-after`。
+你個 ChatGPT account quota 同所有 client（網頁版、ChatGPT app、proxy）共享。Codex 嘅 `codex.rate_limits.limit_reached` 會 surface 做 HTTP 429 + `retry-after`。
 
 ### 3. Codex — reasoning blocks 唔轉發 ⚠️
 官方限制：upstream model 即使有 reasoning，**Codex 路徑唔會 forward 返 Claude Code**，所以你**睇唔到 thinking block**。Response quality 唔受影響，但 debug 時冇 visibility 入 model 諗咩。
 
-> Kimi 路徑就 forward thinking 做 Anthropic-style `thinking` content blocks（除非你 disable thinking）。
-
 ### 4. Codex — image inputs in `tool_result` 會 placeholder
 Codex Responses API 嘅 `function_call_output` 只接受 string，所以 nested 喺 `tool_result` 入面嘅 image block 會變 `[image omitted: <media_type>]`。**Top-level user message 嘅 image 可以正常 pass through**。
-
-Kimi 唔受呢個限制（image 可以 nested 喺 tool result）。
 
 ### 5. Session title generation 會消耗 token
 Claude Code 同時有個 "generate session title" 嘅 background request，proxy 唔會 stub 走，會照 forward 上游 → 每個 session 消耗少量 tokens。我 wrapper 已經 set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` 但呢個唔會完全停掉所有 background traffic。
@@ -750,7 +684,7 @@ Codex 路徑下，`output_config.format` 會被 translate 做 Responses API 嘅 
 
 | 命令 | Backend | Effort |
 |------|---------|--------|
-| `claude` | Anthropic Opus 4.7 | max (per settings.json) |
+| `claude` | Anthropic Opus 4.8 | max (per settings.json) |
 | `claude-cc` | GPT-5.4 via proxy | max → xhigh (Codex mapping)，sub-agent 跟自己 frontmatter |
 | `claude-cc-proxy serve` | 起 proxy server（pass-through，無 override） | n/a |
 | `claude-cc-proxy codex auth status` | 睇 ChatGPT 登入狀態 | n/a |

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 readonly DEFAULT_MIMO_MODEL="mimo-v2.5-pro[1m]"
 readonly DEFAULT_MIMO_BASE_URL="https://api.xiaomimimo.com/anthropic"
 readonly DEFAULT_KEYCHAIN_SERVICE="mimo-claude-code"
@@ -49,10 +51,10 @@ Provide it with one of:
   export ANTHROPIC_API_KEY='...'
 
 Or store it in the macOS Keychain:
-  /Users/howard/Projects/claude-backend-launchers/scripts/setup-mimo-keychain.sh
+  ${script_dir}/setup-mimo-keychain.sh
 
 Then run:
-  /Users/howard/Projects/claude-backend-launchers/scripts/claude-mimo.sh
+  ${script_dir}/claude-mimo.sh
 EOF
   exit 1
 fi
