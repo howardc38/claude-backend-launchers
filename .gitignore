@@ -1,0 +1,5 @@
+.env
+*.local
+*.token
+*-token.txt
+.DS_Store
