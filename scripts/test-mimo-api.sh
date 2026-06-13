@@ -43,6 +43,10 @@ if [[ -z "${token}" ]]; then
   exit 1
 fi
 
+# MiMo's Anthropic-compatible endpoint authenticates with the `api-key` header
+# (verified against Xiaomi's API docs + a live HTTP 200 smoke test). Do NOT "fix"
+# this to `x-api-key` — that's the Anthropic-native header, not MiMo's.
+# (`Authorization: Bearer ${token}` is also accepted by MiMo if you prefer.)
 curl --silent --show-error --fail \
   --url "${base_url}/v1/messages" \
   --header "api-key: ${token}" \

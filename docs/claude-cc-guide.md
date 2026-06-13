@@ -2,16 +2,16 @@
 
 > 透過 `raine/claude-code-proxy` 用 ChatGPT 訂閱跑 Claude Code，作為 Anthropic Opus 嘅替代 backend。
 >
-> 設定日期：2026-05-13 · macOS Apple Silicon (darwin-arm64) · proxy v0.0.12
+> 設定日期：2026-05-13（升級覆核 2026-06-13）· macOS Apple Silicon (darwin-arm64) · proxy v0.0.18
 >
-> **內容已對齊**：[官方 README](https://github.com/raine/claude-code-proxy/blob/main/README.md) (commit 對應 v0.0.12) + binary `strings` 直接 verify + 本機實際 endpoint 測試。所有 env var / mapping / file path 都有 source。
+> **內容已對齊**：[官方 README](https://github.com/raine/claude-code-proxy/blob/main/README.md)（對應 v0.0.18 `--help` / `models`）+ binary `strings` 直接 verify + 本機實際 endpoint 測試。所有 env var / mapping / file path 都有 source。
 
 > **增補（2026-06-09）**：本 repo 另外加入咗 **MiMo 直連 launcher**，唔經 `claude-code-proxy`，直接用 Anthropic-compatible endpoint 跑 Claude Code。以下內容會同時保留：
 > - OpenAI / Codex via `claude-code-proxy`
 > - MiMo direct via `mimo-claude`
 > - 原生 Anthropic via `claude`
 >
-> **增補（2026-06-13 覆核）**：原生 `claude` 現行 flagship 已係 **Opus 4.8**（`claude-opus-4-8`，1M context 預設），取代 Opus 4.7。`claude-code-proxy` upstream 最新為 **v0.0.18**（新增 Cursor provider 等）；本機仍裝 **v0.0.12**，以下 proxy 內容按**已安裝版本**描述（未升級）。
+> **增補（2026-06-13 覆核 + 升級）**：原生 `claude` 現行 flagship 已係 **Opus 4.8**（`claude-opus-4-8`，1M context 預設），取代 Opus 4.7。`claude-code-proxy` **已升級至 v0.0.18**（新增 Cursor provider、`models` 子命令、`CCP_CODEX_TRANSPORT` 等）。`claude-cc` 預設亦由 `gpt-5.4[1m]` 轉為 **`gpt-5.5[1m]`**（本機帳號實測 gpt-5.5 / gpt-5.4 經 Codex 均回 HTTP 200；small/fast 仍用 `gpt-5.4-mini[1m]`，因為冇 gpt-5.5-mini）。舊 binary 備份喺 `~/.local/bin/claude-code-proxy.v0.0.12.bak`。
 
 ---
 
@@ -20,7 +20,7 @@
 | 你打嘅 command | backend | 現時預設 model | context / `[1m]` | effort 行為 |
 |---|---|---|---|---|
 | `claude` | 原生 Anthropic | 你本機 Claude Code 預設 | 由 Anthropic / Claude Code 原生處理 | Claude Code 原生 |
-| `claude-cc` | OpenAI Codex via proxy | `gpt-5.4[1m]` | proxy 會 strip `[1m]` 再送上游；Claude Code 用它調高 auto-compact threshold | `low/medium/high/max` 經 proxy 映射；`max -> xhigh` |
+| `claude-cc` | OpenAI Codex via proxy | `gpt-5.5[1m]` | proxy 會 strip `[1m]` 再送上游；Claude Code 用它調高 auto-compact threshold | `low/medium/high/max` 經 proxy 映射；`max -> xhigh` |
 | `mimo-claude` | MiMo direct（Anthropic-compatible） | `mimo-v2.5-pro[1m]`（本機 launcher 目前設定） | `[1m]` 交由 Claude Code / MiMo 配置慣例處理，用來打開長 context 模式 | **無本地 custom mapping**；Claude Code 的 effort 直接 pass-through |
 
 **最實用理解：**
@@ -55,7 +55,7 @@
 
 | 路徑 | 用途 |
 |------|------|
-| `~/.local/bin/claude-code-proxy` | Proxy binary v0.0.12 (66 MB, ad-hoc signed) |
+| `~/.local/bin/claude-code-proxy` | Proxy binary v0.0.18 (~66 MB, ad-hoc signed)；舊版備份 `claude-code-proxy.v0.0.12.bak` |
 | `~/.local/bin/claude-cc-proxy` | Wrapper：pass-through 起 proxy（無 env override，效一律由 Claude Code 嗰邊決定） |
 | `~/.local/bin/claude-cc` | Wrapper：set ANTHROPIC_* env vars + exec claude |
 | `~/.local/bin/mimo-claude` | User-level symlink / launcher：直連 MiMo Anthropic-compatible endpoint |
@@ -98,7 +98,7 @@ claude-cc --dangerously-skip-permissions   # bypass permission
 claude-cc --effort high                # 臨時改 effort（唔改 settings.json）
 ```
 
-Title bar 應該顯示 `gpt-5.4[1m] with max effort`。
+Title bar 應該顯示 `gpt-5.5[1m] with max effort`。
 
 ### Step 3: 想用返 Anthropic Opus
 
@@ -197,6 +197,11 @@ cd /Users/howard/Projects/claude-backend-launchers
 | `CCP_CODEX_USER_AGENT` | `codex.userAgent` | `claude-code-proxy/<ver>` | User-Agent header |
 | `CCP_ORIGINATOR` | — | `claude-code-proxy` | `CCP_CODEX_ORIGINATOR` 嘅 fallback |
 | `CCP_USER_AGENT` | — | unset | `CCP_CODEX_USER_AGENT` 嘅 fallback |
+| `CCP_CODEX_TRANSPORT` | — | — | Codex 上游傳輸模式（`websocket` / `http` / `auto`）— **v0.0.18 新增** |
+| `CCP_TRAFFIC_LOG` | — | unset | 額外寫低 request/response traffic log — **v0.0.18 新增** |
+| `CCP_CURSOR_BASE_URL` / `_CLIENT_VERSION` / `_AGENT_BUNDLE` / `_AUTH_TOKEN` | — | — | Cursor provider 設定（endpoint / client version / agent bundle / token）— **v0.0.18 新增** |
+
+> v0.0.18 新增嘅 env var **名**由 binary `strings` 確認；其 config key 同預設值未逐一核實，需要時用 `claude-code-proxy --help` / `models --full` 對。
 
 我預設**冇 set** 任何 proxy override env vars — 全部行 default + Claude Code 嗰邊（settings.json / agent frontmatter）控制。
 
@@ -206,8 +211,8 @@ cd /Users/howard/Projects/claude-backend-launchers
 |------|--------|------|
 | `ANTHROPIC_BASE_URL` | `http://127.0.0.1:18765` | 指向本機 proxy |
 | `ANTHROPIC_AUTH_TOKEN` | `unused` | proxy 唔 check，任何字串都 OK |
-| `ANTHROPIC_MODEL` | `gpt-5.4[1m]` | 主 model |
-| `ANTHROPIC_SMALL_FAST_MODEL` | `gpt-5.4-mini[1m]` | Claude Code background 任務（title gen、token count）用嘅 model — **必須 set**，否則 background request 會 400 |
+| `ANTHROPIC_MODEL` | `gpt-5.5[1m]` | 主 model |
+| `ANTHROPIC_SMALL_FAST_MODEL` | `gpt-5.4-mini[1m]` | Claude Code background 任務（title gen、token count）用嘅 model — **必須 set**，否則 background request 會 400。冇 gpt-5.5-mini，故仍用 5.4-mini |
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | 停掉 Anthropic telemetry，唔好洩漏到 proxy |
 | `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK` | `1` | **重要**：proxy 一律用 streaming 與上游溝通，呢個 flag 阻止 Claude Code 重試 partially-completed stream — 否則可能造成 duplicate tool calls |
 | `DISABLE_AUTO_COMPACT` (可選) | unset | =1 完全停掉 auto-compaction（風險：可能撞 upstream 真實 limit） |
@@ -234,7 +239,7 @@ ANTHROPIC_MODEL='gpt-5.4-mini[1m]' claude-cc       # 快/平，Plus 確認可用
 ANTHROPIC_MODEL='gpt-5.4-fast[1m]' claude-cc       # 行 priority service tier
 ```
 
-`claude-cc` wrapper 默認 `gpt-5.4[1m]`。
+`claude-cc` wrapper 默認 `gpt-5.5[1m]`（small/fast 仍係 `gpt-5.4-mini[1m]`）。
 
 ### MiMo：切 model / 切 context
 
@@ -260,20 +265,17 @@ ANTHROPIC_MODEL='mimo-v2.5-pro[1m]' mimo-claude
 | OpenAI / Codex via proxy | `ANTHROPIC_MODEL='gpt-5.4-mini[1m]' claude-cc`、`/model` |
 | MiMo direct | `MIMO_MODEL='mimo-v2.5-pro[1m]' mimo-claude` 或修改 `scripts/claude-mimo.sh` |
 
-### Plus tier 確認可用嘅 model（官方）
+### 本機帳號實測可用嘅 model（2026-06-13 經 proxy 直測）
 
-README 列明喺 **ChatGPT Plus** 帳號確認 working：
-- ✅ `gpt-5.4`
-- ✅ `gpt-5.3-codex`
+- ✅ `gpt-5.5` — 本機帳號實測經 Codex 回 **HTTP 200**，已設為 `claude-cc` 預設
+- ✅ `gpt-5.4` — 同樣實測 200（之前網上傳「ChatGPT-login 受限」喺本帳號**唔適用**）
+- 🟡 `gpt-5.3-codex` / `gpt-5.4-mini` / `gpt-5.2` — README 標 working，本機未逐一直測
 
-「Also verified」(冇講明 tier)：
-- 🟡 `gpt-5.2`
-- 🟡 `gpt-5.4-mini`
-
-⚠️ **未確認**（包括 `gpt-5.5`、`gpt-5.3-codex-spark`）— 你個 ChatGPT account 唔 entitle 嘅話會收到 400 error：
-```
-"The 'gpt-X.X' model is not supported when using Codex with a ChatGPT account."
-```
+> 註：上游 model 若唔 entitle 你個 ChatGPT account 會收到 400：
+> ```
+> "The 'gpt-X.X' model is not supported when using Codex with a ChatGPT account."
+> ```
+> 想自己核：`claude-cc` 入面 `/model`，或啟動時 `ANTHROPIC_MODEL='<model>' claude-cc`。
 
 ### `-fast` suffix（priority service tier）
 
@@ -288,8 +290,10 @@ ANTHROPIC_MODEL='gpt-5.4-fast[1m]' claude-cc
 
 ### 完整 model list（`claude-code-proxy --help` 印出來）
 
-- **Codex provider**：`gpt-5.2` / `gpt-5.3-codex` / `gpt-5.3-codex-spark` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.5`（每個都有 `-fast` 變體）
-- **Anthropic aliases**：`haiku` / `sonnet` / `opus` / `claude-haiku-4-5` / `claude-haiku-4-5-20251001` / `claude-sonnet-4-6` / `claude-opus-4-7` — **預設 route 去 Codex**
+- **Codex provider**：`gpt-5.2` / `gpt-5.3-codex` / `gpt-5.3-codex-spark` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.5`（每個都有 `-fast` 變體）— 本機 `claude-cc` 預設 `gpt-5.5[1m]`
+- **Anthropic aliases**：`haiku` / `sonnet` / `opus` / `claude-haiku-4-5` / `claude-haiku-4-5-20251001` / `claude-sonnet-4-6` / `claude-opus-4-7` — **預設 route 去 Codex**（v0.0.18 列表仍係 `claude-opus-4-7`，未加 4-8）
+- **Cursor provider**（v0.0.18 新增）：`cursor` / `cursor-agent` / `cursor-composer`(`-fast`) / `cursor-plan` / `cursor-ask` / `composer-2.5`(`-fast`)，加上 `cursor:<id>` / `cursor-plan:<id>` / `cursor-ask:<id>` 形式可叫 **129 個 Cursor catalog model**（例：`cursor:gpt-5.5-high`、`cursor:gemini-3.1-pro`）。auth：`claude-cc-proxy cursor auth login`，token 存 macOS Keychain service `claude-code-proxy.cursor`
+- 睇完整列表：`claude-code-proxy models`（精簡）/ `claude-code-proxy models --full`（全部 alias）
 
 ---
 
@@ -303,7 +307,7 @@ Claude Code 用 model 嘅 context window 決定幾時 auto-compact。對於不�
 
 `[1m]` suffix 係 **Claude Code 自己嘅 convention**，叫佢將 auto-compact 嘅 threshold 調高到 1M token。**呢個唔係解鎖更大 context、亦唔係轉去 API 嘅 experimental 1M mode** — 純粹延遲 auto-compaction 嘅時機。
 
-Proxy 收到 `gpt-5.4[1m]` 之後嘅實作（從 binary 確認）：
+Proxy 收到 `gpt-5.5[1m]` 之後嘅實作（從 binary 確認）：
 ```js
 function normalizeIncomingModel(model) {
   return model.replace(/\[1m\]$/i, "");   // strip [1m] 之後送上游
@@ -591,20 +595,23 @@ launchctl unload ~/Library/LaunchAgents/com.user.claude-code-proxy.plist
 curl -fsSL https://api.github.com/repos/raine/claude-code-proxy/releases/latest | grep tag_name
 
 # 拎新版本（手動，安全）
-VERSION=v0.0.13   # 改返做最新 tag
+VERSION=v0.0.18   # 改返做最新 tag（見上面「睇最新 release」）
 cd /tmp
-curl -fsSL -o ccp.tar.gz \
+# ⚠️ 用 -O 保留原始檔名：.sha256 檔內寫住原檔名,改名做 ccp.* 會令 shasum -c 搵唔到檔
+curl -fsSL -O \
   "https://github.com/raine/claude-code-proxy/releases/download/${VERSION}/claude-code-proxy-darwin-arm64.tar.gz"
-curl -fsSL -o ccp.sha256 \
+curl -fsSL -O \
   "https://github.com/raine/claude-code-proxy/releases/download/${VERSION}/claude-code-proxy-darwin-arm64.sha256"
-shasum -a 256 -c ccp.sha256 || exit 1
-tar -xzf ccp.tar.gz
+shasum -a 256 -c claude-code-proxy-darwin-arm64.sha256 || exit 1
+tar -xzf claude-code-proxy-darwin-arm64.tar.gz
 chmod +x claude-code-proxy
+# 備份舊版以便 rollback
+cp -p ~/.local/bin/claude-code-proxy ~/.local/bin/claude-code-proxy.bak 2>/dev/null || true
 mv -f claude-code-proxy ~/.local/bin/claude-code-proxy
 codesign --remove-signature ~/.local/bin/claude-code-proxy 2>/dev/null
 codesign --sign - --force ~/.local/bin/claude-code-proxy
 ~/.local/bin/claude-code-proxy --version
-rm ccp.tar.gz ccp.sha256
+rm claude-code-proxy-darwin-arm64.tar.gz claude-code-proxy-darwin-arm64.sha256
 ```
 
 升級後重啟 proxy（`launchctl kickstart -k gui/$(id -u)/com.user.claude-code-proxy` 如果用 LaunchAgent）。
@@ -676,7 +683,7 @@ Codex 路徑下，`output_config.format` 會被 translate 做 Responses API 嘅 
 `proxy.log` 嘅 secrets（`authorization`, `access`, `refresh`, `id_token`, `ChatGPT-Account-Id` 等）已 redact，但**普通 prompt / response / code 內容唔會 redact**。敏感 repo 慎用，或者用完 `rm proxy.log`。
 
 ### 8. 兩個 backend 並存
-`claude`（Anthropic）同 `claude-cc`（GPT-5.4）可以同時跑唔同 tab，互不干擾。 Proxy 一次 listen 一個 port，所有 session 共用同一個 proxy process。
+`claude`（Anthropic）同 `claude-cc`（GPT-5.5）可以同時跑唔同 tab，互不干擾。 Proxy 一次 listen 一個 port，所有 session 共用同一個 proxy process。
 
 ---
 
@@ -685,7 +692,7 @@ Codex 路徑下，`output_config.format` 會被 translate 做 Responses API 嘅 
 | 命令 | Backend | Effort |
 |------|---------|--------|
 | `claude` | Anthropic Opus 4.8 | max (per settings.json) |
-| `claude-cc` | GPT-5.4 via proxy | max → xhigh (Codex mapping)，sub-agent 跟自己 frontmatter |
+| `claude-cc` | GPT-5.5 via proxy | max → xhigh (Codex mapping)，sub-agent 跟自己 frontmatter |
 | `claude-cc-proxy serve` | 起 proxy server（pass-through，無 override） | n/a |
 | `claude-cc-proxy codex auth status` | 睇 ChatGPT 登入狀態 | n/a |
 
@@ -695,6 +702,6 @@ Codex 路徑下，`output_config.format` 會被 translate 做 Responses API 嘅 
 
 - GitHub: https://github.com/raine/claude-code-proxy
 - Release: https://github.com/raine/claude-code-proxy/releases
-- 當前版本: v0.0.12
+- 當前版本: v0.0.18（本機已裝；upstream latest 同步）
 
 > 本指南由 Claude (Opus 4.7) 於 2026-05-13 為 howard@dress-as.com 製作。
