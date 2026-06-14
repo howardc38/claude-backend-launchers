@@ -7,9 +7,13 @@ readonly DEFAULT_MIMO_MODEL="mimo-v2.5-pro[1m]"
 readonly DEFAULT_MIMO_BASE_URL="https://api.xiaomimimo.com/anthropic"
 readonly DEFAULT_KEYCHAIN_SERVICE="mimo-claude-code"
 
-model="${MIMO_MODEL:-${ANTHROPIC_MODEL:-$DEFAULT_MIMO_MODEL}}"
-base_url="${MIMO_BASE_URL:-${ANTHROPIC_BASE_URL:-$DEFAULT_MIMO_BASE_URL}}"
-small_fast_model="${ANTHROPIC_SMALL_FAST_MODEL:-$model}"
+# Nesting 衛生：唔繼承 parent session 嘅 ANTHROPIC_BASE_URL / ANTHROPIC_MODEL /
+# ANTHROPIC_SMALL_FAST_MODEL。否則由一個已 set 咗呢啲 env 嘅 session（例如 claude-cc
+# 指住 proxy）嵌套 call mimo-claude 時，child 會連錯 endpoint / 用錯 model。
+# 想覆寫請用 MIMO_* 變數（MIMO_MODEL / MIMO_BASE_URL / MIMO_FAST_MODEL）。
+model="${MIMO_MODEL:-$DEFAULT_MIMO_MODEL}"
+base_url="${MIMO_BASE_URL:-$DEFAULT_MIMO_BASE_URL}"
+small_fast_model="${MIMO_FAST_MODEL:-$model}"
 keychain_service="${MIMO_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
 
 resolve_token() {
@@ -62,9 +66,9 @@ fi
 exec env \
   ANTHROPIC_BASE_URL="${base_url}" \
   ANTHROPIC_MODEL="${model}" \
-  ANTHROPIC_DEFAULT_SONNET_MODEL="${ANTHROPIC_DEFAULT_SONNET_MODEL:-$model}" \
-  ANTHROPIC_DEFAULT_OPUS_MODEL="${ANTHROPIC_DEFAULT_OPUS_MODEL:-$model}" \
-  ANTHROPIC_DEFAULT_HAIKU_MODEL="${ANTHROPIC_DEFAULT_HAIKU_MODEL:-$model}" \
+  ANTHROPIC_DEFAULT_SONNET_MODEL="$model" \
+  ANTHROPIC_DEFAULT_OPUS_MODEL="$model" \
+  ANTHROPIC_DEFAULT_HAIKU_MODEL="$model" \
   ANTHROPIC_SMALL_FAST_MODEL="${small_fast_model}" \
   ANTHROPIC_AUTH_TOKEN="${token}" \
   ANTHROPIC_API_KEY="${token}" \

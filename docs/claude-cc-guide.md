@@ -22,12 +22,14 @@
 | `claude` | 原生 Anthropic | 你本機 Claude Code 預設 | 由 Anthropic / Claude Code 原生處理 | Claude Code 原生 |
 | `claude-cc` | OpenAI Codex via proxy | `gpt-5.5[1m]` | proxy 會 strip `[1m]` 再送上游；Claude Code 用它調高 auto-compact threshold | `low/medium/high/max` 經 proxy 映射；`max -> xhigh` |
 | `mimo-claude` | MiMo direct（Anthropic-compatible） | `mimo-v2.5-pro[1m]`（本機 launcher 目前設定） | `[1m]` 交由 Claude Code / MiMo 配置慣例處理，用來打開長 context 模式 | **無本地 custom mapping**；Claude Code 的 effort 直接 pass-through |
+| `deepseek-claude` | DeepSeek direct（Anthropic-compatible） | `deepseek-v4-pro`（fast tier 用 `deepseek-v4-flash`） | **唔好加 `[1m]`**（DeepSeek 官方明講當 formatting artifact）；DeepSeek-V4 原生長 context | effort 經 `output_config.effort` 送上游；DeepSeek 收窄成 **high / max**（low/medium→high，max→max）。複雜 agent（Claude Code）DeepSeek 側預設拉到 `max` |
 
 **最實用理解：**
 
 - 想用原生 Anthropic：`claude`
 - 想用 OpenAI / Codex：`claude-cc`
 - 想用 MiMo：`mimo-claude`
+- 想用 DeepSeek：`deepseek-claude`
 - 想臨時改 effort：任何一個 command 後面都可以加 `--effort high`
 
 ---
@@ -61,6 +63,8 @@
 | `~/.local/bin/mimo-claude` | User-level symlink / launcher：直連 MiMo Anthropic-compatible endpoint |
 | **macOS Keychain** service `claude-code-proxy.codex` | OAuth tokens（**唔係檔案** — 用 Keychain Access 或 `security find-generic-password` 睇）|
 | **macOS Keychain** service `mimo-claude-code` | MiMo API key（`mimo-claude` 讀呢個 service） |
+| `~/.local/bin/deepseek-claude` | User-level symlink / launcher：直連 DeepSeek Anthropic-compatible endpoint |
+| **macOS Keychain** service `deepseek-claude-code` | DeepSeek API key（`deepseek-claude` 讀呢個 service） |
 | `~/.config/claude-code-proxy/config.json` | 可選 config file（env vars 嘅替代品，[詳見配置 section](#-config-file-替代-env-vars)） |
 | `~/.local/state/claude-code-proxy/proxy.log` | JSON-lines log，20 MiB 自動 rotate，secrets 已 redact |
 | `~/.claude/settings.json` | Claude Code 設定（`effortLevel: max`） |
@@ -68,6 +72,10 @@
 | `/Users/howard/Projects/claude-backend-launchers/scripts/claude-mimo.sh` | MiMo 實際 wrapper（set `ANTHROPIC_*` env vars） |
 | `/Users/howard/Projects/claude-backend-launchers/scripts/setup-mimo-keychain.sh` | 寫入 / 更新 MiMo key 到 Keychain |
 | `/Users/howard/Projects/claude-backend-launchers/scripts/test-mimo-api.sh` | 從 Keychain / env 讀 key，直接 call MiMo Anthropic endpoint 做 smoke test |
+| `/Users/howard/Projects/claude-backend-launchers/deepseek-claude` | repo 內 DeepSeek launcher entrypoint（user-level symlink 指向呢個檔案） |
+| `/Users/howard/Projects/claude-backend-launchers/scripts/claude-deepseek.sh` | DeepSeek 實際 wrapper（set `ANTHROPIC_*` env vars） |
+| `/Users/howard/Projects/claude-backend-launchers/scripts/setup-deepseek-keychain.sh` | 寫入 / 更新 DeepSeek key 到 Keychain |
+| `/Users/howard/Projects/claude-backend-launchers/scripts/test-deepseek-api.sh` | 從 Keychain / env 讀 key，直接 call DeepSeek Anthropic endpoint 做 smoke test |
 
 > Linux / 非 macOS 嘅 OAuth token 喺 `~/.config/claude-code-proxy/<provider>/auth.json` (mode 0600)。macOS **只有** Keychain。
 
@@ -132,6 +140,47 @@ cd /Users/howard/Projects/claude-backend-launchers
 | `ANTHROPIC_SMALL_FAST_MODEL` | `mimo-v2.5-pro[1m]` |
 
 > 備註：Xiaomi 官方例子用嘅 model 名係淨 `mimo-v2.5-pro`；`[1m]` 係 Claude Code CLI 慣例（見下面「MiMo 版本點理解 `[1m]`」），本機 launcher 預設帶 `[1m]` 屬無害，可用 `MIMO_MODEL=mimo-v2.5-pro` 覆寫。
+
+### Step 5: 想用 DeepSeek（直連，唔經 proxy）
+
+先存 key 入 Keychain（一次）：
+
+```sh
+/Users/howard/Projects/claude-backend-launchers/scripts/setup-deepseek-keychain.sh
+# 貼入 DeepSeek API key（sk-...）
+```
+
+之後：
+
+```sh
+deepseek-claude
+deepseek-claude --effort max          # 拉到 DeepSeek "max" thinking
+DEEPSEEK_MODEL=deepseek-v4-flash deepseek-claude   # 改用 flash（快 / 慳 quota / 唔 think 咁深）
+```
+
+**目前本機 `deepseek-claude` 會 set：**
+
+| 變數 | 值 |
+|------|----|
+| `ANTHROPIC_BASE_URL` | `https://api.deepseek.com/anthropic` |
+| `ANTHROPIC_MODEL` | `deepseek-v4-pro`（**唔帶 `[1m]`**） |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL` / `_SONNET_MODEL` | `deepseek-v4-pro` |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL` | `deepseek-v4-flash` |
+| `ANTHROPIC_SMALL_FAST_MODEL` | `deepseek-v4-flash` |
+
+> 覆寫位：`DEEPSEEK_MODEL` / `DEEPSEEK_FAST_MODEL` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_KEYCHAIN_SERVICE` / `DEEPSEEK_ANTHROPIC_AUTH_TOKEN`。長期改：改 `scripts/claude-deepseek.sh` 頂部嘅 `DEFAULT_*`。
+
+#### DeepSeek-v4-pro 嘅 thinking mode / effort 點設定 ⭐
+
+> 來源：[DeepSeek Thinking Mode 官方 doc](https://api-docs.deepseek.com/guides/thinking_mode) + [Claude Code 整合 doc](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code)（2026-06-14 覆核）。
+
+- **Thinking 預設係 ON** — `deepseek-v4-pro` 係 reasoning model，thinking toggle 預設 `enabled`，唔使你做嘢去開。
+- **Effort 用 Claude Code 原生機制控制**，唔使 set DeepSeek-specific 嘢：
+  - `~/.claude/settings.json` 嘅 `effortLevel`、或 `deepseek-claude --effort <low|medium|high|max>`、或 `CLAUDE_CODE_EFFORT_LEVEL=max`。
+  - Claude Code 會把佢經 `output_config.effort` 送上游，**DeepSeek 收窄成兩級**：`low`/`medium`/`high` → DeepSeek `high`；`max` → DeepSeek `max`。即係 v4-pro 冇真正嘅 low/medium，最低就係 "high"。
+  - DeepSeek 官方仲講明：**對 Claude Code 呢類複雜 agent request，佢哋會自動把 effort 拉到 `max`**。你 `settings.json` 而家已經係 `effortLevel: max` → 即天然行 DeepSeek max。
+- **想關 thinking / 要快**：v4-pro 經 Claude Code 嘅 Anthropic 路徑**冇乾淨方法**逐個 request 收 thinking（DeepSeek 只接受 `thinking:{type:disabled}`，而 Claude Code 唔會幫你送呢個、亦冇 "none" effort 級）。要「唔 think 咁深」就**改用 `deepseek-v4-flash`**（`DEEPSEEK_MODEL=deepseek-v4-flash deepseek-claude`，或者交畀 haiku/small-fast mapping 嘅 background 任務行）。
+- ⚠️ **成本提醒**：DeepSeek `max` thinking 嘅 chain-of-thought 可以好長 → 食 token 多 + 慢。日常 task 用 `--effort high` 已足夠；淨係硬數學 / 多步 planning / agent 先值得 `max`。
 
 ---
 
@@ -248,8 +297,9 @@ ANTHROPIC_MODEL='gpt-5.4-fast[1m]' claude-cc       # 行 priority service tier
 ```sh
 MIMO_MODEL='mimo-v2.5-pro' mimo-claude
 MIMO_MODEL='mimo-v2.5-pro[1m]' mimo-claude
-ANTHROPIC_MODEL='mimo-v2.5-pro[1m]' mimo-claude
 ```
+
+> ⚠️ 覆寫一律用 `MIMO_MODEL` / `MIMO_BASE_URL` / `MIMO_FAST_MODEL`。launcher **唔再繼承** parent 嘅 `ANTHROPIC_MODEL` / `ANTHROPIC_BASE_URL`（nesting 衛生，見下面 §嵌套呼叫），所以 `ANTHROPIC_MODEL='...' mimo-claude` 已經唔生效。
 
 如果你想改長期預設，改 repo 入面呢個檔案：
 
@@ -264,6 +314,7 @@ ANTHROPIC_MODEL='mimo-v2.5-pro[1m]' mimo-claude
 | Anthropic 原生 | `claude` 入面 `/model`，或者本機 Claude Code 設定 |
 | OpenAI / Codex via proxy | `ANTHROPIC_MODEL='gpt-5.4-mini[1m]' claude-cc`、`/model` |
 | MiMo direct | `MIMO_MODEL='mimo-v2.5-pro[1m]' mimo-claude` 或修改 `scripts/claude-mimo.sh` |
+| DeepSeek direct | `DEEPSEEK_MODEL='deepseek-v4-flash' deepseek-claude` 或修改 `scripts/claude-deepseek.sh`（預設 `deepseek-v4-pro`，唔帶 `[1m]`） |
 
 ### 本機帳號實測可用嘅 model（2026-06-13 經 proxy 直測）
 
@@ -294,6 +345,47 @@ ANTHROPIC_MODEL='gpt-5.4-fast[1m]' claude-cc
 - **Anthropic aliases**：`haiku` / `sonnet` / `opus` / `claude-haiku-4-5` / `claude-haiku-4-5-20251001` / `claude-sonnet-4-6` / `claude-opus-4-7` — **預設 route 去 Codex**（v0.0.18 列表仍係 `claude-opus-4-7`，未加 4-8）
 - **Cursor provider**（v0.0.18 新增）：`cursor` / `cursor-agent` / `cursor-composer`(`-fast`) / `cursor-plan` / `cursor-ask` / `composer-2.5`(`-fast`)，加上 `cursor:<id>` / `cursor-plan:<id>` / `cursor-ask:<id>` 形式可叫 **129 個 Cursor catalog model**（例：`cursor:gpt-5.5-high`、`cursor:gemini-3.1-pro`）。auth：`claude-cc-proxy cursor auth login`，token 存 macOS Keychain service `claude-code-proxy.cursor`
 - 睇完整列表：`claude-code-proxy models`（精簡）/ `claude-code-proxy models --full`（全部 alias）
+
+---
+
+## 🪆 嵌套呼叫：由官方 Claude Code call 後端 agent
+
+可以喺**官方 Anthropic-backed `claude`** session 入面，叫一個跑 MiMo / DeepSeek 嘅 Claude Code agent 做嘢。
+
+**唔係用 native sub-agent** —— Claude Code 內建 sub-agent（Task tool / agent frontmatter）一律共用 main session 嘅 `ANTHROPIC_*` 連線，無法 route 去另一個 backend（`CLAUDE_CODE_SUBAGENT_MODEL` 只改 model 名，唔改 provider）。
+
+**正解係 headless shell-out**：由 main session 嘅 Bash tool 跑後端 launcher 嘅 print 模式（`-p`）。本 repo 提供一個 wrapper：
+
+```sh
+ask-backend mimo "用一句講解 TCP three-way handshake"
+ask-backend deepseek --effort max "review 呢個 function: ..."
+ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改檔先加
+```
+
+`ask-backend`（→ `scripts/ask-backend.sh`）做嘅事：
+
+1. 先 `env -u` 清走繼承落嚟嘅 `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` 等（**nesting 衛生**），再 pin 後端 base URL；
+2. 用 `claude -p`（headless）跑對應 launcher，回純文字 stdout；
+3. auth token 由各 launcher 自己由 macOS Keychain 讀。
+
+> 配合 launcher 本身嘅 nesting 衛生（launcher 已**唔再繼承** parent 嘅 `ANTHROPIC_BASE_URL`/`ANTHROPIC_MODEL`），即使由 `claude-cc`（指住 proxy）嵌套呼叫都唔會連錯 endpoint。
+
+### 全域 slash command `/ask-backend`
+
+`~/.claude/commands/ask-backend.md` 令呢個能力喺**所有**官方 Claude Code session 都有：
+
+```
+/ask-backend mimo "explain X"
+/ask-backend deepseek --effort max "review this code: ..."
+```
+
+它會（已預先授權 Bash）跑 `ask-backend $ARGUMENTS`，再 relay 後端答案 + 註明邊個 backend。
+
+**要知嘅 caveat：**
+
+- nested agent 用**獨立 context + 獨立 quota**（MiMo / DeepSeek key），同當前 Anthropic session 無關。
+- 預設係唯讀問答；要改檔要明確加 `--permission-mode acceptEdits`（或 `--dangerously-skip-permissions`，慎用）。
+- 後端 launcher 要搵到（repo 喺 `/Users/howard/Projects/claude-backend-launchers`），key 要已存入對應 Keychain service。
 
 ---
 
@@ -343,6 +435,7 @@ function normalizeIncomingModel(model) {
 | Anthropic 原生 | 跟 Anthropic / Claude Code 原生行為 | 以官方 Claude / Anthropic 文檔為準 | 原生 |
 | OpenAI Codex via proxy | Claude Code auto-compact hint；proxy strip 後送上游 | `gpt-5.4` via Codex 實測 / README 約 400K+ | `max -> xhigh` |
 | MiMo direct | `[1m]` 係 Claude Code CLI client-side 慣例（非 Xiaomi 規定） | Xiaomi 文檔：`mimo-v2.5-pro` 原生 1M context window | **無本地 custom mapping，pass-through** |
+| DeepSeek direct | **唔加 `[1m]`**（DeepSeek 官方當 formatting artifact） | DeepSeek-V4 原生長 context（think-max 模式建議 ≥384K） | `output_config.effort`：low/medium/high→`high`，max→`max`；Claude Code agent 預設拉 `max` |
 
 ### 用法 implication
 
@@ -401,12 +494,12 @@ Token auto-refresh：access token expire 前 5 分鐘 proxy 會自動 refresh，
 | **macOS** | Keychain service `claude-code-proxy.codex` |
 | Linux/其他 | `~/.config/claude-code-proxy/codex/auth.json` (mode 0600) |
 
-### MiMo key 存放位置（本 repo launcher）
+### MiMo / DeepSeek key 存放位置（本 repo launcher）
 
-| 平台 | MiMo key |
-|------|---------|
-| **macOS** | Keychain service `mimo-claude-code` |
-| 其他 | 目前本 repo launcher 主要按 env vars / macOS Keychain 設計，未做 Linux file-based helper |
+| 平台 | MiMo key | DeepSeek key |
+|------|---------|-------------|
+| **macOS** | Keychain service `mimo-claude-code` | Keychain service `deepseek-claude-code` |
+| 其他 | 目前本 repo launcher 主要按 env vars / macOS Keychain 設計，未做 Linux file-based helper | 同左 |
 
 ### 點更新 MiMo API key（唔好直接寫落 shell history）
 
@@ -693,6 +786,8 @@ Codex 路徑下，`output_config.format` 會被 translate 做 Responses API 嘅 
 |------|---------|--------|
 | `claude` | Anthropic Opus 4.8 | max (per settings.json) |
 | `claude-cc` | GPT-5.5 via proxy | max → xhigh (Codex mapping)，sub-agent 跟自己 frontmatter |
+| `mimo-claude` | MiMo v2.5 Pro（直連） | pass-through（無本地 mapping） |
+| `deepseek-claude` | DeepSeek V4 Pro（直連） | low/med/high→high，max→max；CC agent 預設 max |
 | `claude-cc-proxy serve` | 起 proxy server（pass-through，無 override） | n/a |
 | `claude-cc-proxy codex auth status` | 睇 ChatGPT 登入狀態 | n/a |
 
