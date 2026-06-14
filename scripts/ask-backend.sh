@@ -81,16 +81,19 @@ strip_env=(
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL
 )
 
+# prompt 由 arg 傳，唔靠 stdin —— `< /dev/null` 避免 claude -p 等 3s piped stdin
+# 再吐 warning（agent-to-backend 呼叫嘅常見路徑）。要 pipe 內容入後端，直接用
+# 對應 launcher：`deepseek-claude -p "..." < file`。
 case "${backend}" in
   mimo)
     exec env "${strip_env[@]}" \
       MIMO_BASE_URL="https://api.xiaomimimo.com/anthropic" \
-      "${repo_dir}/mimo-claude" -p "${prompt}" "$@"
+      "${repo_dir}/mimo-claude" -p "${prompt}" "$@" < /dev/null
     ;;
   deepseek)
     exec env "${strip_env[@]}" \
       DEEPSEEK_BASE_URL="https://api.deepseek.com/anthropic" \
-      "${repo_dir}/deepseek-claude" -p "${prompt}" "$@"
+      "${repo_dir}/deepseek-claude" -p "${prompt}" "$@" < /dev/null
     ;;
   *)
     echo "Error: unknown backend '${backend}'. Use: mimo | deepseek (see --list)." >&2
