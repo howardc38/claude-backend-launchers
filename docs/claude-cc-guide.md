@@ -357,9 +357,15 @@ ANTHROPIC_MODEL='gpt-5.4-fast[1m]' claude-cc
 **正解係 headless shell-out**：由 main session 嘅 Bash tool 跑後端 launcher 嘅 print 模式（`-p`）。本 repo 提供一個 wrapper：
 
 ```sh
-ask-backend mimo "用一句講解 TCP three-way handshake"
-ask-backend deepseek --effort max "review 呢個 function: ..."
-ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改檔先加
+# 唯讀問答（安全預設）— 攞意見 / review / 解釋，唔會郁你啲檔
+ask-backend deepseek "review 呢個 function 有冇 bug"
+ask-backend deepseek --effort max "解釋呢個 module 點 work"
+
+# 畀佢改檔（auto-accept file edits）
+ask-backend deepseek "幫我 fix 呢個 bug" --permission-mode acceptEdits
+
+# 畀佢完全自主（讀寫 + 跑任意 Bash）— 慎用
+ask-backend deepseek "重構呢個 module" --dangerously-skip-permissions
 ```
 
 `ask-backend`（→ `scripts/ask-backend.sh`）做嘅事：
@@ -369,6 +375,23 @@ ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改
 3. auth token 由各 launcher 自己由 macOS Keychain 讀。
 
 > 配合 launcher 本身嘅 nesting 衛生（launcher 已**唔再繼承** parent 嘅 `ANTHROPIC_BASE_URL`/`ANTHROPIC_MODEL`），即使由 `claude-cc`（指住 proxy）嵌套呼叫都唔會連錯 endpoint。
+
+### 權限：佢可唔可以郁你啲檔？⚠️（實測）
+
+nested agent 係**完整 Claude Code**（有齊 `Read` / `Write` / `Edit` / `Bash`），背後 LLM 只係換成 DeepSeek / MiMo。能唔能改檔，由**權限模式**決定：
+
+| 點打 | 行為（已實測） |
+|---|---|
+| `ask-backend deepseek "..."`（預設） | ⛔ 想 `Write` 會卡喺等授權，headless 冇得批 → **唔會改檔**。實際 = 可讀、可答、唔可改。 |
+| `... --permission-mode acceptEdits` | ✅ auto-accept file edits，**會真係寫 / 改檔**。 |
+| `... --dangerously-skip-permissions` | ✅✅ 讀寫 + 跑任意 Bash，完全唔問。**慎用**。 |
+
+**兩個關鍵 caveat：**
+
+1. **作用範圍 = 你執行 `ask-backend` 嗰個 cwd**，唔係 launcher repo、亦**冇額外沙箱**。喺 `~/Projects/foo` 跑 `--permission-mode acceptEdits` 就會改 `~/Projects/foo`；`--dangerously-skip-permissions` 更可掂到你帳號掂得到嘅任何嘢。
+2. **內容會送去第三方**：就算純讀，agent 睇到嘅 code / 檔案內容都會經 API 送上 DeepSeek / MiMo。敏感 repo / 客戶 code / secrets **唔好**咁畀佢睇。
+
+**建議**：日常用預設（唯讀）；要佢落手改 code 先加 `--permission-mode acceptEdits`，而且喺**乾淨 git working tree** 跑，改完 `git diff` 睇過先收。唔好對住有 secret / 生產 repo 用 `--dangerously-skip-permissions`。
 
 ### 全域 slash command `/ask-backend`
 
@@ -384,7 +407,7 @@ ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改
 **要知嘅 caveat：**
 
 - nested agent 用**獨立 context + 獨立 quota**（MiMo / DeepSeek key），同當前 Anthropic session 無關。
-- 預設係唯讀問答；要改檔要明確加 `--permission-mode acceptEdits`（或 `--dangerously-skip-permissions`，慎用）。
+- 檔案操作 / 權限見上面 [§權限](#權限佢可唔可以郁你啲檔實測)：預設唯讀，要改檔先加 `--permission-mode acceptEdits`。slash command 傳同樣 flag，例如 `/ask-backend deepseek "fix bug" --permission-mode acceptEdits`。
 - 後端 launcher 要搵到（repo 喺 `/Users/howard/Projects/claude-backend-launchers`），key 要已存入對應 Keychain service。
 
 ---

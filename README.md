@@ -16,7 +16,7 @@
 - `scripts/debug-deepseek-auth-source.sh` — 印 auth 來源（值已 mask）
 
 **嵌套呼叫（由官方 Claude Code call 後端 agent）**
-- `ask-backend` — wrapper，exec `scripts/ask-backend.sh`；安全咁 headless（`claude -p`）call `mimo` / `deepseek`，已做 nesting env 衛生
+- `ask-backend` — wrapper，exec `scripts/ask-backend.sh`；安全咁 headless（`claude -p`）call `mimo` / `deepseek`，已做 nesting env 衛生。**預設唯讀**（唔會改檔）；要佢改檔加 `--permission-mode acceptEdits`，完全自主加 `--dangerously-skip-permissions`（慎用）。資料會送去第三方 backend
 - `~/.claude/commands/ask-backend.md` — 全域 slash command `/ask-backend`（用法見手冊「嵌套呼叫」section）
 
 **手冊**
