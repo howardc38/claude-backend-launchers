@@ -2,6 +2,9 @@
 # Tibo-style Claude Code launcher: Claude Code harness + GPT-5.6 via CLIProxyAPI.
 set -euo pipefail
 
+script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/credentials.sh"
+
 readonly DEFAULT_BASE_URL="http://127.0.0.1:8317"
 readonly DEFAULT_MODEL="gpt-5.6-sol"
 readonly DEFAULT_LUNA_MODEL="gpt-5.6-luna"
@@ -9,14 +12,12 @@ readonly DEFAULT_TERRA_MODEL="gpt-5.6-terra"
 readonly DEFAULT_EFFORT="max"
 readonly DEFAULT_CONCURRENCY="3"
 readonly DEFAULT_MAX_CONTEXT_TOKENS="1050000"
-readonly DEFAULT_KEYCHAIN_SERVICE="cliproxyapi-claudex"
 
 base_url="${CLAUDEX_BASE_URL:-$DEFAULT_BASE_URL}"
 active_model="${CLAUDEX_MODEL:-$DEFAULT_MODEL}"
 effort="${CLAUDEX_EFFORT:-$DEFAULT_EFFORT}"
 concurrency="${CLAUDEX_CONCURRENCY:-$DEFAULT_CONCURRENCY}"
 max_context_tokens="${CLAUDEX_MAX_CONTEXT_TOKENS:-$DEFAULT_MAX_CONTEXT_TOKENS}"
-keychain_service="${CLAUDEX_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
 skip_permissions="${CLAUDEX_SKIP_PERMISSIONS:-1}"
 args=()
 user_set_permissions=0
@@ -79,28 +80,9 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 1
 fi
 
-resolve_proxy_key() {
-  if [[ -n "${CLAUDEX_PROXY_KEY:-}" ]]; then
-    printf '%s' "$CLAUDEX_PROXY_KEY"
-    return
-  fi
-
-  if ! command -v security >/dev/null 2>&1; then
-    printf 'claudex: macOS Keychain utility is unavailable\n' >&2
-    return 1
-  fi
-
-  security find-generic-password \
-    -a "$(id -un)" \
-    -s "$keychain_service" \
-    -w 2>/dev/null
-}
-
-if ! proxy_key="$(resolve_proxy_key)" || [[ -z "$proxy_key" ]]; then
-  printf 'claudex: local CLIProxyAPI key not found in Keychain service %s\n' "$keychain_service" >&2
-  printf 'Run the repository setup procedure before launching claudex.\n' >&2
-  exit 1
-fi
+cb_load_auth claudex
+proxy_key="$CB_TOKEN"
+unset CB_TOKEN
 
 models_json=""
 if ! models_json="$(curl --silent --show-error --fail \
@@ -108,7 +90,7 @@ if ! models_json="$(curl --silent --show-error --fail \
   -H "Authorization: Bearer ${proxy_key}" \
   "${base_url}/v1/models")"; then
   printf 'claudex: CLIProxyAPI is not reachable or rejected the local key at %s\n' "$base_url" >&2
-  printf 'Check it with: brew services info cliproxyapi\n' >&2
+  printf 'Start CLIProxyAPI with your OS service manager or cli-proxy-api --config <config.yaml>\n' >&2
   exit 1
 fi
 

@@ -20,7 +20,7 @@ set -euo pipefail
 #   ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改檔先加
 #
 # 回傳: 後端 agent 嘅最終答案（純文字）去 stdout。auth token 由各 launcher 自己
-#       由 macOS Keychain 讀（mimo-claude-code / deepseek-claude-code / glm-claude-code）。
+#       由環境變數或 OS credential store 讀。
 
 prog="ask-backend"
 
@@ -71,10 +71,23 @@ prompt="$1"
 shift
 # 餘下 "$@" = 額外 flags（可空）。"$@" 喺 bash 3.2 + set -u 下零參數都安全。
 
+user_set_permissions=0
+for arg in "$@"; do
+  case "$arg" in
+    --dangerously-skip-permissions|--allow-dangerously-skip-permissions|--permission-mode|--permission-mode=*)
+      user_set_permissions=1
+      ;;
+  esac
+done
+if [[ "$user_set_permissions" == 0 ]]; then
+  set -- --permission-mode default "$@"
+fi
+
 # 共用：要 strip 走嘅繼承 endpoint/model env（防止 nested 連錯後端）。
-# 注意：唔 strip ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY —— launcher 會 Keychain 優先，
-# 但保留佢哋做 no-keychain 時嘅 fallback。
+# Generic parent credentials belong to that session, not the selected backend.
 strip_env=(
+  -u ANTHROPIC_AUTH_TOKEN
+  -u ANTHROPIC_API_KEY
   -u ANTHROPIC_BASE_URL
   -u ANTHROPIC_MODEL
   -u ANTHROPIC_SMALL_FAST_MODEL

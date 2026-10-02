@@ -1,47 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 readonly DEFAULT_MIMO_MODEL="mimo-v2.6-pro"
 readonly DEFAULT_MIMO_BASE_URL="https://api.xiaomimimo.com/anthropic"
-readonly DEFAULT_KEYCHAIN_SERVICE="mimo-claude-code"
 
 base_url="${MIMO_BASE_URL:-$DEFAULT_MIMO_BASE_URL}"
 model="${MIMO_MODEL:-$DEFAULT_MIMO_MODEL}"
-keychain_service="${MIMO_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
 
-resolve_token() {
-  if [[ -n "${MIMO_ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${MIMO_ANTHROPIC_AUTH_TOKEN}"
-    return 0
-  fi
-
-  if command -v security >/dev/null 2>&1; then
-    token_from_keychain="$(security find-generic-password -a "${USER}" -s "${keychain_service}" -w 2>/dev/null || true)"
-    if [[ -n "${token_from_keychain}" ]]; then
-      printf '%s' "${token_from_keychain}"
-      return 0
-    fi
-  fi
-
-  if [[ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${ANTHROPIC_AUTH_TOKEN}"
-    return 0
-  fi
-
-  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-    printf '%s' "${ANTHROPIC_API_KEY}"
-    return 0
-  fi
-
-  return 0
-}
-
-token="$(resolve_token)"
-
-if [[ -z "${token}" ]]; then
-  echo "Missing MiMo token. Run setup-mimo-keychain.sh first." >&2
-  exit 1
-fi
+source "$script_dir/lib/credentials.sh"
+cb_load_auth mimo
+token="$CB_TOKEN"
+unset CB_TOKEN
 
 # MiMo's Anthropic-compatible endpoint authenticates with the `api-key` header
 # (verified against Xiaomi's API docs + a live HTTP 200 smoke test). Do NOT "fix"

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/credentials.sh"
+
 readonly DEFAULT_BASE_URL="http://127.0.0.1:8317"
-readonly DEFAULT_KEYCHAIN_SERVICE="cliproxyapi-claudex"
 
 base_url="${CLAUDEX_BASE_URL:-$DEFAULT_BASE_URL}"
-keychain_service="${CLAUDEX_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
 model="${CLAUDEX_MODEL:-gpt-5.6-luna}"
 
 case "${1:-}" in
@@ -14,15 +15,9 @@ case "${1:-}" in
   *) printf 'Usage: %s [--sol|--luna]\n' "$0" >&2; exit 2 ;;
 esac
 
-proxy_key="${CLAUDEX_PROXY_KEY:-}"
-if [[ -z "$proxy_key" ]]; then
-  proxy_key="$(security find-generic-password \
-    -a "$(id -un)" -s "$keychain_service" -w 2>/dev/null || true)"
-fi
-if [[ -z "$proxy_key" ]]; then
-  printf 'Error: local CLIProxyAPI key not found in Keychain service %s\n' "$keychain_service" >&2
-  exit 1
-fi
+cb_load_auth claudex
+proxy_key="$CB_TOKEN"
+unset CB_TOKEN
 
 models_json="$(curl --silent --show-error --fail \
   --connect-timeout 2 --max-time 10 \

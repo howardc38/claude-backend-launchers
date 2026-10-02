@@ -1,5 +1,7 @@
 # Claude Code 多後端手冊
 
+macOS / Linux / WSL 都支援；Linux credential、命令安裝同 CLIProxyAPI 設定見 [Linux guide](linux.md)。各 `setup-*-keychain.sh` 保留為 alias；建議用 `scripts/setup-credential.sh <backend>`。API smoke tests 同診斷共用同一 credential resolver。
+
 > 更新：2026-08-14。Codex 路線已由舊 proxy 完整換成 Tibo 公開方法：`CLIProxyAPI` + Codex OAuth + `claudex`。
 
 ## 快速選擇

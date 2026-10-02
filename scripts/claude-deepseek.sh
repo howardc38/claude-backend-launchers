@@ -11,7 +11,6 @@ script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly DEFAULT_DEEPSEEK_MODEL="deepseek-v4-flash[1m]"
 readonly DEFAULT_DEEPSEEK_FAST_MODEL="deepseek-v4-flash"
 readonly DEFAULT_DEEPSEEK_BASE_URL="https://api.deepseek.com/anthropic"
-readonly DEFAULT_KEYCHAIN_SERVICE="deepseek-claude-code"
 readonly DEFAULT_DEEPSEEK_EFFORT_LEVEL="max"
 
 # 明確把 auto-compact window 設為 1M。現行 Claude Code 對 [1m] model 本身亦預設 1M，
@@ -24,7 +23,6 @@ readonly DEFAULT_AUTO_COMPACT_WINDOW="1000000"
 model="${DEEPSEEK_MODEL:-$DEFAULT_DEEPSEEK_MODEL}"
 fast_model="${DEEPSEEK_FAST_MODEL:-$DEFAULT_DEEPSEEK_FAST_MODEL}"
 base_url="${DEEPSEEK_BASE_URL:-$DEFAULT_DEEPSEEK_BASE_URL}"
-keychain_service="${DEEPSEEK_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
 auto_compact_window="${DEEPSEEK_AUTO_COMPACT_WINDOW:-$DEFAULT_AUTO_COMPACT_WINDOW}"
 effort_level="${DEEPSEEK_EFFORT_LEVEL:-$DEFAULT_DEEPSEEK_EFFORT_LEVEL}"
 skip_permissions="${DEEPSEEK_SKIP_PERMISSIONS:-1}"
@@ -50,52 +48,10 @@ if [[ "$skip_permissions" == "1" && "$user_set_permissions" == "0" ]]; then
   set -- --dangerously-skip-permissions "$@"
 fi
 
-resolve_token() {
-  if [[ -n "${DEEPSEEK_ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${DEEPSEEK_ANTHROPIC_AUTH_TOKEN}"
-    return 0
-  fi
-
-  if command -v security >/dev/null 2>&1; then
-    token_from_keychain="$(security find-generic-password -a "${USER}" -s "${keychain_service}" -w 2>/dev/null || true)"
-    if [[ -n "${token_from_keychain}" ]]; then
-      printf '%s' "${token_from_keychain}"
-      return 0
-    fi
-  fi
-
-  if [[ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${ANTHROPIC_AUTH_TOKEN}"
-    return 0
-  fi
-
-  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-    printf '%s' "${ANTHROPIC_API_KEY}"
-    return 0
-  fi
-
-  return 0
-}
-
-token="$(resolve_token)"
-
-if [[ -z "${token}" ]]; then
-  cat >&2 <<EOF
-Missing DeepSeek auth token.
-
-Provide it with one of:
-  export DEEPSEEK_ANTHROPIC_AUTH_TOKEN='sk-...'
-  export ANTHROPIC_AUTH_TOKEN='sk-...'
-  export ANTHROPIC_API_KEY='sk-...'
-
-Or store it in the macOS Keychain:
-  ${script_dir}/setup-deepseek-keychain.sh
-
-Then run:
-  ${script_dir}/claude-deepseek.sh
-EOF
-  exit 1
-fi
+source "$script_dir/lib/credentials.sh"
+cb_load_auth deepseek
+token="$CB_TOKEN"
+unset CB_TOKEN
 
 # DeepSeek 官方推薦：opus/sonnet -> pro，haiku/small-fast -> flash（慳 quota）。
 # 認證：同時 set ANTHROPIC_AUTH_TOKEN（-> Authorization: Bearer）同 ANTHROPIC_API_KEY

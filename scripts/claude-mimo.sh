@@ -5,7 +5,6 @@ script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 readonly DEFAULT_MIMO_MODEL="mimo-v2.6-pro[1m]"
 readonly DEFAULT_MIMO_BASE_URL="https://api.xiaomimimo.com/anthropic"
-readonly DEFAULT_KEYCHAIN_SERVICE="mimo-claude-code"
 readonly DEFAULT_MIMO_EFFORT_LEVEL="max"
 readonly DEFAULT_MAX_CONTEXT_TOKENS="1048576"
 # Leave 256K tokens of headroom for MiMo's reasoning/output and Claude Code's
@@ -25,7 +24,6 @@ readonly DEFAULT_DISABLE_NONSTREAMING_FALLBACK="0"
 model="${MIMO_MODEL:-$DEFAULT_MIMO_MODEL}"
 base_url="${MIMO_BASE_URL:-$DEFAULT_MIMO_BASE_URL}"
 small_fast_model="${MIMO_FAST_MODEL:-$model}"
-keychain_service="${MIMO_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
 effort_level="${MIMO_EFFORT_LEVEL:-$DEFAULT_MIMO_EFFORT_LEVEL}"
 max_context_tokens="${MIMO_MAX_CONTEXT_TOKENS:-$DEFAULT_MAX_CONTEXT_TOKENS}"
 auto_compact_window="${MIMO_AUTO_COMPACT_WINDOW:-$DEFAULT_AUTO_COMPACT_WINDOW}"
@@ -94,52 +92,10 @@ if [[ "$skip_permissions" == "1" && "$user_set_permissions" == "0" ]]; then
   set -- --dangerously-skip-permissions "$@"
 fi
 
-resolve_token() {
-  if [[ -n "${MIMO_ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${MIMO_ANTHROPIC_AUTH_TOKEN}"
-    return 0
-  fi
-
-  if command -v security >/dev/null 2>&1; then
-    token_from_keychain="$(security find-generic-password -a "${USER}" -s "${keychain_service}" -w 2>/dev/null || true)"
-    if [[ -n "${token_from_keychain}" ]]; then
-      printf '%s' "${token_from_keychain}"
-      return 0
-    fi
-  fi
-
-  if [[ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${ANTHROPIC_AUTH_TOKEN}"
-    return 0
-  fi
-
-  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-    printf '%s' "${ANTHROPIC_API_KEY}"
-    return 0
-  fi
-
-  return 0
-}
-
-token="$(resolve_token)"
-
-if [[ -z "${token}" ]]; then
-  cat >&2 <<EOF
-Missing Mimo auth token.
-
-Provide it with one of:
-  export MIMO_ANTHROPIC_AUTH_TOKEN='...'
-  export ANTHROPIC_AUTH_TOKEN='...'
-  export ANTHROPIC_API_KEY='...'
-
-Or store it in the macOS Keychain:
-  ${script_dir}/setup-mimo-keychain.sh
-
-Then run:
-  ${script_dir}/claude-mimo.sh
-EOF
-  exit 1
-fi
+source "$script_dir/lib/credentials.sh"
+cb_load_auth mimo
+token="$CB_TOKEN"
+unset CB_TOKEN
 
 exec env \
   ANTHROPIC_BASE_URL="${base_url}" \

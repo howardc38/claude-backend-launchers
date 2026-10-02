@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$script_dir/lib/credentials.sh"
+
 base_url="${CLAUDEX_BASE_URL:-http://127.0.0.1:8317}"
-keychain_service="${CLAUDEX_KEYCHAIN_SERVICE:-cliproxyapi-claudex}"
-proxy_bin="$(command -v cliproxyapi 2>/dev/null || true)"
+proxy_bin="$(command -v cliproxyapi 2>/dev/null || command -v cli-proxy-api 2>/dev/null || true)"
 
 printf 'CLIProxyAPI binary: %s\n' "${proxy_bin:-missing}"
 if [[ -n "$proxy_bin" ]]; then
   "$proxy_bin" -h 2>&1 | head -1 || true
 fi
 
-if security find-generic-password -a "$(id -un)" -s "$keychain_service" >/dev/null 2>&1; then
-  printf 'Local client key: Keychain service %s (value hidden)\n' "$keychain_service"
-  proxy_key="$(security find-generic-password -a "$(id -un)" -s "$keychain_service" -w 2>/dev/null)"
-else
-  printf 'Local client key: missing\n'
-  exit 1
-fi
+cb_load_auth claudex
+printf 'Local client key: %s (value hidden)\n' "$CB_SOURCE"
+proxy_key="$CB_TOKEN"
+unset CB_TOKEN
 
 if models_json="$(curl --silent --show-error --fail \
   --connect-timeout 2 --max-time 10 \
