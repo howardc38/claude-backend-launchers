@@ -5,22 +5,22 @@ set -euo pipefail
 #
 # 用 headless print 模式（claude -p）跑後端 launcher，並先用 `env -u` 清走會洩漏嘅
 # ANTHROPIC_* endpoint/model env（nesting 衛生），再 pin 後端專屬 base URL，確保 child
-# 一定連去正確 endpoint —— 即使呢個 helper 由 claude-cc（已指住 proxy）嗰類 session 嵌套
+# 一定連去正確 endpoint —— 即使呢個 helper 由其他已指住 proxy 嘅 session 嵌套
 # 呼叫都唔會連錯。
 #
 # 用法:
 #   ask-backend <backend> <prompt> [extra claude flags...]
 #   ask-backend --list | -h | --help
 #
-# backend: mimo | deepseek
+# backend: mimo | deepseek | glm
 #
 # 例:
 #   ask-backend mimo "用一句講解 TCP three-way handshake"
-#   ask-backend deepseek --effort max "review 呢個 function: ..."
+#   ask-backend deepseek "review 呢個 function: ..."
 #   ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改檔先加
 #
 # 回傳: 後端 agent 嘅最終答案（純文字）去 stdout。auth token 由各 launcher 自己
-#       由 macOS Keychain 讀（mimo-claude-code / deepseek-claude-code）。
+#       由 macOS Keychain 讀（mimo-claude-code / deepseek-claude-code / glm-claude-code）。
 
 prog="ask-backend"
 
@@ -30,12 +30,13 @@ Usage: ${prog} <backend> <prompt> [extra claude flags...]
        ${prog} --list
 
 backends:
-  mimo       MiMo v2.5 Pro    (https://api.xiaomimimo.com/anthropic)
-  deepseek   DeepSeek V4 Pro  (https://api.deepseek.com/anthropic)
+  mimo       MiMo v2.6 Pro    (https://api.xiaomimimo.com/anthropic)
+  deepseek   DeepSeek V4 Flash (https://api.deepseek.com/anthropic)
+  glm        GLM 5.2          (https://api.z.ai/api/anthropic)
 
 examples:
   ${prog} mimo "explain the TCP handshake in one line"
-  ${prog} deepseek --effort max "review this code: ..."
+  ${prog} deepseek "review this code: ..."
 EOF
 }
 
@@ -52,6 +53,7 @@ case "${1:-}" in
   --list)
     echo "mimo"
     echo "deepseek"
+    echo "glm"
     exit 0
     ;;
 esac
@@ -95,8 +97,13 @@ case "${backend}" in
       DEEPSEEK_BASE_URL="https://api.deepseek.com/anthropic" \
       "${repo_dir}/deepseek-claude" -p "${prompt}" "$@" < /dev/null
     ;;
+  glm)
+    exec env "${strip_env[@]}" \
+      GLM_BASE_URL="https://api.z.ai/api/anthropic" \
+      "${repo_dir}/glm-claude" -p "${prompt}" "$@" < /dev/null
+    ;;
   *)
-    echo "Error: unknown backend '${backend}'. Use: mimo | deepseek (see --list)." >&2
+    echo "Error: unknown backend '${backend}'. Use: mimo | deepseek | glm (see --list)." >&2
     usage >&2
     exit 2
     ;;

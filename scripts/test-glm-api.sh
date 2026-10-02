@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly DEFAULT_MIMO_MODEL="mimo-v2.6-pro"
-readonly DEFAULT_MIMO_BASE_URL="https://api.xiaomimimo.com/anthropic"
-readonly DEFAULT_KEYCHAIN_SERVICE="mimo-claude-code"
+readonly DEFAULT_GLM_MODEL="glm-5.2"
+readonly DEFAULT_GLM_BASE_URL="https://api.z.ai/api/anthropic"
+readonly DEFAULT_KEYCHAIN_SERVICE="glm-claude-code"
 
-base_url="${MIMO_BASE_URL:-$DEFAULT_MIMO_BASE_URL}"
-model="${MIMO_MODEL:-$DEFAULT_MIMO_MODEL}"
-keychain_service="${MIMO_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
+base_url="${GLM_BASE_URL:-$DEFAULT_GLM_BASE_URL}"
+model="${GLM_MODEL:-$DEFAULT_GLM_MODEL}"
+keychain_service="${GLM_KEYCHAIN_SERVICE:-$DEFAULT_KEYCHAIN_SERVICE}"
+
+# Raw curl talks directly to Z.AI. Claude Code's [1m] suffix is a client-side
+# convention, so strip it for this smoke test.
+api_model="${model%[[]1m[]]}"
 
 resolve_token() {
-  if [[ -n "${MIMO_ANTHROPIC_AUTH_TOKEN:-}" ]]; then
-    printf '%s' "${MIMO_ANTHROPIC_AUTH_TOKEN}"
+  if [[ -n "${GLM_ANTHROPIC_AUTH_TOKEN:-}" ]]; then
+    printf '%s' "${GLM_ANTHROPIC_AUTH_TOKEN}"
     return 0
   fi
 
@@ -39,23 +43,19 @@ resolve_token() {
 token="$(resolve_token)"
 
 if [[ -z "${token}" ]]; then
-  echo "Missing MiMo token. Run setup-mimo-keychain.sh first." >&2
+  echo "Missing GLM token. Run setup-glm-keychain.sh first." >&2
   exit 1
 fi
 
-# MiMo's Anthropic-compatible endpoint authenticates with the `api-key` header
-# (verified against Xiaomi's API docs + a live HTTP 200 smoke test). Do NOT "fix"
-# this to `x-api-key` — that's the Anthropic-native header, not MiMo's.
-# (`Authorization: Bearer ${token}` is also accepted by MiMo if you prefer.)
 curl --silent --show-error --fail \
   --url "${base_url}/v1/messages" \
-  --header "api-key: ${token}" \
+  --header "x-api-key: ${token}" \
+  --header "anthropic-version: 2023-06-01" \
   --header "Content-Type: application/json" \
   --data @- <<EOF
 {
-  "model": "${model}",
+  "model": "${api_model}",
   "max_tokens": 32,
-  "thinking": { "type": "disabled" },
   "messages": [
     {
       "role": "user",
