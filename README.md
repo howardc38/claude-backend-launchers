@@ -28,7 +28,7 @@ mimo-claude
 |---|---|---|---|
 | `mimo-claude` | Xiaomi MiMo | `mimo-v2.6-pro[1m]` | `MIMO_MODEL` 覆寫 |
 | `deepseek-claude` | DeepSeek | `deepseek-v4-flash[1m]` | `DEEPSEEK_MODEL='deepseek-v4-pro[1m]'` |
-| `glm-claude` | Z.AI | `glm-5.2[1m]`；fast `glm-4.5-air` | `GLM_MODEL` / `GLM_FAST_MODEL` 覆寫 |
+| `glm-claude` | Z.AI | `glm-5.3[1m]`；fast `glm-5.3-flash[1m]`；effort `max` | `GLM_MODEL` / `GLM_FAST_MODEL` 覆寫 |
 | `claudex` | Codex via CLIProxyAPI | `gpt-5.6-sol` | `--luna`、`--terra` 或 `CLAUDEX_MODEL` |
 
 以上係 launcher 設定；實際可用 models / quota 由 provider 同你嘅帳戶決定。MiMo、DeepSeek 同 `claudex` 預設跳過 Claude Code permission prompts；下面各 backend 說明有關閉方法。
@@ -57,8 +57,8 @@ mimo-claude
 - `scripts/test-deepseek-api.sh` — endpoint smoke test
 - `scripts/debug-deepseek-auth-source.sh` — 印 auth 來源（值已 mask）
 
-**GLM / Z.AI（官方 Claude Code endpoint，預設 `glm-5.2[1m]`）**
-> 官方 Claude Code base URL：`https://api.z.ai/api/anthropic`。Opus/Sonnet → `glm-5.2[1m]`，Haiku / small-fast → `glm-4.5-air`；`CLAUDE_CODE_AUTO_COMPACT_WINDOW=1000000`。
+**GLM / Z.AI（官方 Claude Code endpoint，預設 `glm-5.3[1m]`）**
+> 官方 Claude Code base URL：`https://api.z.ai/api/anthropic`。主 session／sub-agent／Opus／Sonnet → `glm-5.3[1m]`，Haiku / small-fast → `glm-5.3-flash[1m]`；effort 明確設 `max`，context／auto-compact window 為 `1000000`。[官方 model / effort 設定](https://docs.z.ai/devpack/latest-model)。
 - `glm-claude` — launcher，exec `scripts/claude-glm.sh`
 - `scripts/setup-credential.sh glm` — 隱藏輸入，存入 OS credential store
 - `scripts/test-glm-api.sh` — endpoint smoke test（raw curl 會 strip `[1m]`）

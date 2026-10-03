@@ -121,6 +121,25 @@ class Credentials(unittest.TestCase):
         self.assertNotIn("test-secret-do-not-show", result.stdout + result.stderr)
         self.assertIn("value=hidden", result.stdout)
 
+    def test_glm_model_effort_and_nested_settings(self):
+        self.env.update(GLM_ANTHROPIC_AUTH_TOKEN="test-glm", CLAUDE_CODE_SUBAGENT_MODEL="parent-model", CLAUDE_CODE_EFFORT_LEVEL="low", API_TIMEOUT_MS="1")
+        self.fake("claude", "exec python3 -c 'import os,json,sys; print(json.dumps({\"model\":os.environ[\"ANTHROPIC_MODEL\"],\"fast\":os.environ[\"ANTHROPIC_SMALL_FAST_MODEL\"],\"haiku\":os.environ[\"ANTHROPIC_DEFAULT_HAIKU_MODEL\"],\"subagent\":os.environ[\"CLAUDE_CODE_SUBAGENT_MODEL\"],\"effort\":os.environ[\"CLAUDE_CODE_EFFORT_LEVEL\"],\"context\":os.environ[\"CLAUDE_CODE_MAX_CONTEXT_TOKENS\"],\"timeout\":os.environ[\"API_TIMEOUT_MS\"],\"args\":sys.argv[1:]}))' \"$@\"")
+        result = self.run_script("glm-claude")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["model"], "glm-5.3[1m]")
+        self.assertEqual(value["fast"], "glm-5.3-flash[1m]")
+        self.assertEqual(value["haiku"], value["fast"])
+        self.assertEqual(value["subagent"], value["model"])
+        self.assertEqual(value["effort"], "max")
+        self.assertEqual(value["context"], "1000000")
+        self.assertEqual(value["timeout"], "3000000")
+        self.assertEqual(value["args"], ["--effort", "max"])
+        result = self.run_script("glm-claude", "--effort", "high")
+        self.assertEqual(json.loads(result.stdout)["args"], ["--effort", "high"])
+        self.env["GLM_EFFORT_LEVEL"] = "invalid"
+        self.assertEqual(self.run_script("glm-claude").returncode, 2)
+
     def test_smoke_tests_share_credentials(self):
         self.fake("pass", 'printf test-pass-key')
         self.env["CLAUDE_BACKEND_CREDENTIAL_STORE"] = "pass"

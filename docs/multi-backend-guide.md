@@ -13,7 +13,7 @@ macOS / Linux / WSL 都支援；Linux credential、命令安裝同 CLIProxyAPI �
 | `claudex --luna` | ChatGPT / Codex OAuth | `gpt-5.6-luna`，其餘同上 |
 | `mimo-claude` | Xiaomi MiMo | `mimo-v2.6-pro[1m]`；主 / fast / sub-agent 全部 Pro；client effort `max`；預設 bypass permission |
 | `deepseek-claude` | DeepSeek | `deepseek-v4-flash[1m]`，sub-agent / fast 用 Flash，`max`，預設 bypass permission |
-| `glm-claude` | Z.AI | `glm-5.2[1m]`，fast 用 `glm-4.5-air` |
+| `glm-claude` | Z.AI | `glm-5.3[1m]`，fast 用 `glm-5.3-flash[1m]`，effort `max` |
 | `ask-backend` | MiMo / DeepSeek / GLM | headless child agent，預設唯讀 |
 
 ## Tibo 方法係乜
@@ -164,7 +164,9 @@ DEEPSEEK_SKIP_PERMISSIONS=0 deepseek-claude
 glm-claude
 ```
 
-預設主 model `glm-5.2[1m]`，fast `glm-4.5-air`，auto-compact window 明確設 1M。
+預設主 model／sub-agent `glm-5.3[1m]`，fast `glm-5.3-flash[1m]`，effort 明確設 `max`，context／auto-compact window 明確設 1M。可用 `GLM_MODEL`、`GLM_FAST_MODEL`、`GLM_SUBAGENT_MODEL`、`GLM_EFFORT_LEVEL` 覆寫；例如 `GLM_MODEL='glm-5.3-flash[1m]' glm-claude`。
+
+依 [Z.AI 最新官方設定](https://docs.z.ai/devpack/latest-model)，5.3 同 5.3 Flash 均支援 1M，`xhigh`／`max`／`ultra` 映射到最高 `max`。如果收到 HTTP 429，亦要讀 error code：`1113` 表示餘額不足／冇 resource package，唔應當成普通瞬間限流不斷重試；到 Console 核對 Coding Plan／quota／付款狀態。
 
 ## 由一個 session 呼叫另一個 backend
 

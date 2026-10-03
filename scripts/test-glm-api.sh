@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-readonly DEFAULT_GLM_MODEL="glm-5.2"
+readonly DEFAULT_GLM_MODEL="glm-5.3"
 readonly DEFAULT_GLM_BASE_URL="https://api.z.ai/api/anthropic"
 
 base_url="${GLM_BASE_URL:-$DEFAULT_GLM_BASE_URL}"
@@ -19,6 +19,7 @@ token="$CB_TOKEN"
 unset CB_TOKEN
 
 curl --silent --show-error --fail \
+  --connect-timeout 10 --max-time 60 \
   --url "${base_url}/v1/messages" \
   --header "x-api-key: ${token}" \
   --header "anthropic-version: 2023-06-01" \
@@ -26,7 +27,8 @@ curl --silent --show-error --fail \
   --data @- <<EOF
 {
   "model": "${api_model}",
-  "max_tokens": 32,
+  "max_tokens": 256,
+  "thinking": { "type": "disabled" },
   "messages": [
     {
       "role": "user",

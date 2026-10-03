@@ -32,7 +32,7 @@ Usage: ${prog} <backend> <prompt> [extra claude flags...]
 backends:
   mimo       MiMo v2.6 Pro    (https://api.xiaomimimo.com/anthropic)
   deepseek   DeepSeek V4 Flash (https://api.deepseek.com/anthropic)
-  glm        GLM 5.2          (https://api.z.ai/api/anthropic)
+  glm        GLM 5.3          (https://api.z.ai/api/anthropic)
 
 examples:
   ${prog} mimo "explain the TCP handshake in one line"
