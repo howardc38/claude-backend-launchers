@@ -1,7 +1,15 @@
 .env
+.env.*
+!.env.example
 *.local
 *.token
 *-token.txt
+*.key
+*.pem
+.cli-proxy-api/
+config/cliproxyapi.conf
+config/cliproxyapi.yaml
+config/cliproxyapi.yml
 .DS_Store
 __pycache__/
 *.pyc

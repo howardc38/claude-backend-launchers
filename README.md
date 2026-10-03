@@ -1,15 +1,39 @@
 # claude-backend-launchers
 
+Cross-platform launchers for Claude Code with MiMo, DeepSeek, Z.AI GLM, and Codex via CLIProxyAPI.
+
 當 Claude Code 用盡 token / 想用其他後端時嘅 launcher + 手冊。
-由 auto-dev-docs 抽出（與 auto-dev 框架零耦合）。
+獨立使用，無需其他框架。以 [MIT License](LICENSE) 開源。
 
 支援 **macOS + Linux / WSL**。Mac 自動讀 Keychain，Linux 自動讀 Secret Service / `pass`；四個 backend 都可用專屬環境變數。完整安裝：[Linux guide](docs/linux.md)。
 
+## 快速開始
+
+需要 Git、Bash 3.2+、curl，同已安裝並在 PATH 上嘅 `claude`（[Claude Code 安裝說明](https://code.claude.com/docs/en/setup)）。直連 backend 需要自己嘅 API key；`claudex` 需要另行安裝、設定 CLIProxyAPI 同登入 Codex OAuth，見 [完整手冊](docs/multi-backend-guide.md)。
+
 ```bash
+git clone https://github.com/howardc38/claude-backend-launchers.git
+cd claude-backend-launchers
 ./scripts/install-launchers.sh
+export PATH="$HOME/.local/bin:$PATH"
 ./scripts/setup-credential.sh mimo      # 隱藏輸入，存入 OS store
 mimo-claude
 ```
+
+安裝程式建立 symlink；請保留 checkout。每位使用者需要自行設定 credentials，Git clone 唔會帶走任何 API key / OAuth credential。
+
+## 支援後端與預設 models
+
+| 命令 | 後端 | 預設 model | 其他選擇 |
+|---|---|---|---|
+| `mimo-claude` | Xiaomi MiMo | `mimo-v2.6-pro[1m]` | `MIMO_MODEL` 覆寫 |
+| `deepseek-claude` | DeepSeek | `deepseek-v4-flash[1m]` | `DEEPSEEK_MODEL='deepseek-v4-pro[1m]'` |
+| `glm-claude` | Z.AI | `glm-5.2[1m]`；fast `glm-4.5-air` | `GLM_MODEL` / `GLM_FAST_MODEL` 覆寫 |
+| `claudex` | Codex via CLIProxyAPI | `gpt-5.6-sol` | `--luna`、`--terra` 或 `CLAUDEX_MODEL` |
+
+以上係 launcher 設定；實際可用 models / quota 由 provider 同你嘅帳戶決定。MiMo、DeepSeek 同 `claudex` 預設跳過 Claude Code permission prompts；下面各 backend 說明有關閉方法。
+
+## 用法
 
 **Codex / Tibo `claudex`（CLIProxyAPI + ChatGPT OAuth）**
 > 預設 `gpt-5.6-sol`、主 session / sub-agent 都係 `max`、tool concurrency 3，而且預設 `--dangerously-skip-permissions`。想用 Luna：`claudex --luna`；想保留 permission prompts：`CLAUDEX_SKIP_PERMISSIONS=0 claudex`。
@@ -42,11 +66,25 @@ mimo-claude
 
 **嵌套呼叫（由官方 Claude Code call 後端 agent）**
 - `ask-backend` — wrapper，exec `scripts/ask-backend.sh`；安全咁 headless（`claude -p`）call `mimo` / `deepseek` / `glm`，已做 nesting env 衛生。**預設唯讀**（唔會改檔）；要佢改檔加 `--permission-mode acceptEdits`，完全自主加 `--dangerously-skip-permissions`（慎用）。資料會送去第三方 backend
-- `~/.claude/commands/ask-backend.md` — 全域 slash command `/ask-backend`（用法見手冊「嵌套呼叫」section）
+- headless 用法見手冊「由一個 session 呼叫另一個 backend」section
 
 **手冊**
 - `docs/multi-backend-guide.md` — Tibo / CLIProxyAPI + 多後端完整手冊
 
 ## 硬規則（安全）
 直連 backend API key 同 CLIProxyAPI 本地 client key 存 macOS Keychain、Linux Secret Service 或 GPG 加密 `pass`；CI 可用專屬環境變數。Service 名稱：MiMo → `mimo-claude-code`；DeepSeek → `deepseek-claude-code`；GLM → `glm-claude-code`；CLIProxyAPI client → `cliproxyapi-claudex`。CLIProxyAPI 上游 OAuth credential 由程式管理於 `~/.cli-proxy-api`，directory / file 必須分別維持 `0700` / `0600`，**永不**放入 repo / git。
-唔好 commit 任何 `.env` / `*.local` / token 檔（見 .gitignore）。PRIVATE repo。
+唔好 commit 任何 `.env` / `*.local` / token 檔（見 .gitignore）。
+
+## 開發與測試
+
+Offline tests 唔需要真實 API key，亦唔會連去 backend：
+
+```bash
+python3 -B -m unittest discover -s tests -v
+```
+
+GitHub Actions 會喺 macOS 同 Linux 跑 regression tests，並喺 Linux 驗證 Secret Service / `pass` integration。
+
+## License
+
+[MIT](LICENSE) © 2026 howardc38。
