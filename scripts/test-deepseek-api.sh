@@ -14,11 +14,11 @@ cb_load_auth deepseek
 token="$CB_TOKEN"
 unset CB_TOKEN
 
-# DeepSeek 嘅 Anthropic-compatible endpoint 用 DeepSeek-native 認證:
-# `Authorization: Bearer <key>`（同 DeepSeek native API 一致；亦接受 x-api-key）。
-# ⚠️ 同 MiMo 唔一樣 —— MiMo 嗰個 endpoint 用 `api-key` header。
-# 收到 HTTP 200 + JSON 即代表 endpoint + key 通（即使 reasoning 食晒少量 max_tokens、
-# content 為空，200 已足以證明連線同認證 OK）。
+# DeepSeek's Anthropic-compatible endpoint accepts its native authentication:
+# `Authorization: Bearer <key>`; x-api-key is also accepted.
+# MiMo's endpoint uses the `api-key` header instead.
+# HTTP 200 with JSON confirms connectivity and authentication, even when
+# reasoning consumes the small max_tokens budget and leaves content empty.
 curl --silent --show-error --fail \
   --url "${base_url}/v1/messages" \
   --header "Authorization: Bearer ${token}" \

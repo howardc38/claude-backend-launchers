@@ -17,10 +17,10 @@ readonly DEFAULT_MAX_RETRIES="3"
 readonly DEFAULT_TOOL_CONCURRENCY="3"
 readonly DEFAULT_DISABLE_NONSTREAMING_FALLBACK="0"
 
-# Nesting 衛生：唔繼承 parent session 嘅 ANTHROPIC_BASE_URL / ANTHROPIC_MODEL /
-# ANTHROPIC_SMALL_FAST_MODEL。否則由一個已 set 咗呢啲 env 嘅 proxied session
-# 嵌套 call mimo-claude 時，child 會連錯 endpoint / 用錯 model。
-# 想覆寫請用 MIMO_* 變數（MIMO_MODEL / MIMO_BASE_URL / MIMO_FAST_MODEL）。
+# Do not inherit the parent's ANTHROPIC_BASE_URL, ANTHROPIC_MODEL, or
+# ANTHROPIC_SMALL_FAST_MODEL: a nested proxied session could otherwise use
+# the wrong endpoint or model. Override with MIMO_* variables instead
+# (MIMO_MODEL / MIMO_BASE_URL / MIMO_FAST_MODEL).
 model="${MIMO_MODEL:-$DEFAULT_MIMO_MODEL}"
 base_url="${MIMO_BASE_URL:-$DEFAULT_MIMO_BASE_URL}"
 small_fast_model="${MIMO_FAST_MODEL:-$model}"

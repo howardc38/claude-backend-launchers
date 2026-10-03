@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ask-backend — 由官方 Claude Code（或任何 shell）安全咁 call 一個後端 LLM agent。
+# ask-backend — call a backend LLM agent from Claude Code or any shell.
 #
-# 用 headless print 模式（claude -p）跑後端 launcher，並先用 `env -u` 清走會洩漏嘅
-# ANTHROPIC_* endpoint/model env（nesting 衛生），再 pin 後端專屬 base URL，確保 child
-# 一定連去正確 endpoint —— 即使呢個 helper 由其他已指住 proxy 嘅 session 嵌套
-# 呼叫都唔會連錯。
+# Run the backend launcher in headless print mode (claude -p). First use
+# `env -u` to clear inherited ANTHROPIC_* endpoint/model settings, then pin
+# the backend-specific base URL so the child connects to the correct endpoint,
+# even when called from a parent session configured for another proxy.
 #
-# 用法:
+# Usage:
 #   ask-backend <backend> <prompt> [extra claude flags...]
 #   ask-backend --list | -h | --help
 #
 # backend: mimo | deepseek | glm
 #
-# 例:
-#   ask-backend mimo "用一句講解 TCP three-way handshake"
-#   ask-backend deepseek "review 呢個 function: ..."
-#   ask-backend deepseek "幫我改 README" --permission-mode acceptEdits   # 要改檔先加
+# Examples:
+#   ask-backend mimo "explain the TCP three-way handshake in one sentence"
+#   ask-backend deepseek "review this function: ..."
+#   ask-backend deepseek "update the README" --permission-mode acceptEdits   # Allow file edits
 #
-# 回傳: 後端 agent 嘅最終答案（純文字）去 stdout。auth token 由各 launcher 自己
-#       由環境變數或 OS credential store 讀。
+# Output: the backend agent's final answer as plain text on stdout.
+# Each launcher loads its own token from the environment or OS credential store.
 
 prog="ask-backend"
 
@@ -40,8 +40,8 @@ examples:
 EOF
 }
 
-# engine 永遠住喺 <repo>/scripts/，root entrypoint 會用絕對路徑 exec 佢，所以
-# 直接由自己位置推算 repo root 即可。
+# The engine lives in <repo>/scripts/ and the root entrypoint executes it by
+# absolute path, so derive the repository root from this script's location.
 script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -P -- "${script_dir}/.." && pwd)"
 
@@ -69,7 +69,7 @@ fi
 
 prompt="$1"
 shift
-# 餘下 "$@" = 額外 flags（可空）。"$@" 喺 bash 3.2 + set -u 下零參數都安全。
+# Remaining "$@" contains optional extra flags; an empty "$@" is safe in Bash 3.2 with set -u.
 
 user_set_permissions=0
 for arg in "$@"; do
@@ -83,7 +83,7 @@ if [[ "$user_set_permissions" == 0 ]]; then
   set -- --permission-mode default "$@"
 fi
 
-# 共用：要 strip 走嘅繼承 endpoint/model env（防止 nested 連錯後端）。
+# Clear inherited endpoint/model settings so nested calls use the intended backend.
 # Generic parent credentials belong to that session, not the selected backend.
 strip_env=(
   -u ANTHROPIC_AUTH_TOKEN
@@ -96,9 +96,10 @@ strip_env=(
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL
 )
 
-# prompt 由 arg 傳，唔靠 stdin —— `< /dev/null` 避免 claude -p 等 3s piped stdin
-# 再吐 warning（agent-to-backend 呼叫嘅常見路徑）。要 pipe 內容入後端，直接用
-# 對應 launcher：`deepseek-claude -p "..." < file`。
+# Pass the prompt as an argument. `< /dev/null` avoids claude -p waiting three
+# seconds for piped stdin and emitting a warning during agent-to-backend calls.
+# To pass file contents through stdin, use the launcher directly:
+# `deepseek-claude -p "..." < file`.
 case "${backend}" in
   mimo)
     exec env "${strip_env[@]}" \

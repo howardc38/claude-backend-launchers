@@ -46,7 +46,7 @@ Defaults to `gpt-5.6-sol`, with `max` effort for the main session and subagents,
 
 ### MiMo (Xiaomi MiMo Anthropic-compatible endpoint)
 
-Defaults to `mimo-v2.6-pro[1m]` for the main session, fast tier, and subagents. Claude Code effort defaults to `max`, with a context ceiling of `1048576`, an auto-compact window of `786432`, and `--dangerously-skip-permissions`.
+Defaults to `mimo-v2.6-pro[1m]` for the main session, fast tier, and subagents. Claude Code effort defaults to `max`. The launcher exports `CLAUDE_CODE_MAX_CONTEXT_TOKENS=1048576`, sets an auto-compact window of `786432`, and enables `--dangerously-skip-permissions`. Recent Claude Code versions assume a 1M window for unknown `[1m]` model IDs and ignore the context override on its own; see the [context configuration notes](docs/multi-backend-guide.md#context-window-settings).
 
 Reliability defaults include a 10-minute request timeout, 90-second first-byte and stream-idle watchdogs, 3 retries, tool concurrency of 3, and non-streaming fallback when streaming fails. MiMo currently treats all non-`none` effort levels as the same thinking-enabled mode: `max` is the highest client setting, but does not provide more server-side reasoning effort than `high`.
 
@@ -83,7 +83,7 @@ Uses the official Claude Code base URL `https://api.z.ai/api/anthropic`. The mai
 
 [`ask-backend`](ask-backend) executes [`scripts/ask-backend.sh`](scripts/ask-backend.sh) to call `mimo`, `deepseek`, or `glm` in headless mode (`claude -p`). It clears inherited endpoint and model settings before launching the child session.
 
-It is **read-only by default**. Add `--permission-mode acceptEdits` to allow file edits, or `--dangerously-skip-permissions` for autonomous execution; use the latter with care. Prompts and code are sent to the selected third-party backend.
+It uses **Claude Code's default permission mode**, without automatically bypassing checks. Existing permission rules still apply, so it does not guarantee read-only execution. Add `--permission-mode acceptEdits` to allow file edits automatically, or `--dangerously-skip-permissions` for autonomous execution; use the latter with care. Prompts and code are sent to the selected third-party backend.
 
 See the nested-call section of the [full guide](docs/multi-backend-guide.md) for examples.
 

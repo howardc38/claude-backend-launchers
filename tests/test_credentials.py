@@ -175,7 +175,7 @@ class Credentials(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Stored mimo credential in pass", result.stdout)
 
-    def test_ask_backend_keeps_readonly_default(self):
+    def test_ask_backend_uses_default_permissions(self):
         self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="correct-provider", ANTHROPIC_AUTH_TOKEN="parent-provider")
         result = self.run_script("ask-backend", "mimo", "test")
         self.assertEqual(result.returncode, 0, result.stderr)

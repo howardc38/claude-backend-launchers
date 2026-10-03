@@ -3,23 +3,24 @@ set -euo pipefail
 
 script_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-# 主 model 預設 = deepseek-v4-flash；fast/sub-agent 同樣用 deepseek-v4-flash。
-# 主 model 必須帶 [1m]，Claude Code 先會按 DeepSeek 真實能力使用 1M context；未知嘅第三方
-# model id 否則會按 200K 處理。呢個係 Claude Code 官方支援嘅 client-side suffix，送 request
-# 去 provider 前會 strip。DeepSeek 官方確認 Flash 原生支援 1M；本機亦已實測 Flash[1m]
-# 經 Claude Code 成功回應並顯示 contextWindow=1000000。
+# The main, fast, and subagent models default to deepseek-v4-flash.
+# Keep [1m] on the main model so Claude Code uses the full 1M context window
+# instead of its 200K fallback for unknown third-party model IDs. This supported
+# client-side suffix is stripped before sending requests to the provider.
+# DeepSeek documents native 1M support for Flash; a local Claude Code smoke test
+# also returned successfully with contextWindow=1000000 for Flash[1m].
 readonly DEFAULT_DEEPSEEK_MODEL="deepseek-v4-flash[1m]"
 readonly DEFAULT_DEEPSEEK_FAST_MODEL="deepseek-v4-flash"
 readonly DEFAULT_DEEPSEEK_BASE_URL="https://api.deepseek.com/anthropic"
 readonly DEFAULT_DEEPSEEK_EFFORT_LEVEL="max"
 
-# 明確把 auto-compact window 設為 1M。現行 Claude Code 對 [1m] model 本身亦預設 1M，
-# 所以呢個值屬 explicit pin；可用 DEEPSEEK_AUTO_COMPACT_WINDOW 調低，令 compaction 更早發生。
+# Explicitly pin the auto-compact window to 1M, matching Claude Code's default
+# for [1m] models. Lower DEEPSEEK_AUTO_COMPACT_WINDOW to compact earlier.
 readonly DEFAULT_AUTO_COMPACT_WINDOW="1000000"
 
-# Nesting 衛生：唔繼承 parent session 嘅 ANTHROPIC_BASE_URL / ANTHROPIC_MODEL /
-# ANTHROPIC_SMALL_FAST_MODEL（否則由其他已 set 咗 env 嘅 proxied session 嵌套 call
-# 時會連錯 endpoint）。想覆寫請用 DEEPSEEK_* 變數。
+# Do not inherit the parent's ANTHROPIC_BASE_URL, ANTHROPIC_MODEL, or
+# ANTHROPIC_SMALL_FAST_MODEL, which could route a nested session to the wrong
+# endpoint. Override with DEEPSEEK_* variables instead.
 model="${DEEPSEEK_MODEL:-$DEFAULT_DEEPSEEK_MODEL}"
 fast_model="${DEEPSEEK_FAST_MODEL:-$DEFAULT_DEEPSEEK_FAST_MODEL}"
 base_url="${DEEPSEEK_BASE_URL:-$DEFAULT_DEEPSEEK_BASE_URL}"
@@ -53,9 +54,9 @@ cb_load_auth deepseek
 token="$CB_TOKEN"
 unset CB_TOKEN
 
-# DeepSeek 官方推薦：opus/sonnet -> pro，haiku/small-fast -> flash（慳 quota）。
-# 認證：同時 set ANTHROPIC_AUTH_TOKEN（-> Authorization: Bearer）同 ANTHROPIC_API_KEY
-# （-> x-api-key）；DeepSeek /anthropic endpoint 兩者皆收。
+# This launcher maps Opus/Sonnet to the selected main model and Haiku/small-fast
+# to the fast model. Set both ANTHROPIC_AUTH_TOKEN (Authorization: Bearer) and
+# ANTHROPIC_API_KEY (x-api-key); DeepSeek's /anthropic endpoint accepts both.
 exec env \
   ANTHROPIC_BASE_URL="${base_url}" \
   ANTHROPIC_MODEL="${model}" \
