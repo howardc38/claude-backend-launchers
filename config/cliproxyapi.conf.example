@@ -1,4 +1,6 @@
 # Secure local-only baseline for the Tibo-style claudex launcher.
+# Configuration layout: CLIProxyAPI 7.2.130 (Homebrew baseline).
+# Check your installed version; newer versions may reorganize these keys.
 host: "127.0.0.1"
 port: 8317
 
@@ -21,6 +23,7 @@ debug: false
 commercial-mode: false
 logging-to-file: false
 logs-max-total-size-mb: 0
+# Failed requests can still create logs containing prompt/request bodies.
 error-logs-max-files: 10
 usage-statistics-enabled: false
 

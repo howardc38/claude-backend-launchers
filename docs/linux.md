@@ -1,6 +1,6 @@
 # Linux / WSL setup
 
-Supports Linux desktops, headless servers, and WSL. Requires Bash 3.2+, curl, and an installed Claude Code CLI; jq is useful for inspecting smoke-test JSON. macOS continues to use existing Keychain entries.
+Supports Linux desktops, headless servers, and WSL. Requires Bash 3.2+, curl, and an installed Claude Code CLI. Proxy model checks and API smoke tests also require jq. macOS continues to use existing Keychain entries.
 
 ## Install the commands
 
@@ -71,7 +71,7 @@ The other dedicated variables are `DEEPSEEK_ANTHROPIC_AUTH_TOKEN`, `GLM_ANTHROPI
 
 Lookup order: backend-specific environment variable → OS store (macOS Keychain or Linux desktop Secret Service) → `pass` → legacy standalone Anthropic environment variables. `CLAUDE_BACKEND_CREDENTIAL_STORE=env` skips stores; `keychain`, `secret-service`, and `pass` select a single store. Backend-specific environment variables always take priority. `claudex` only accepts its own client key and never reads generic Anthropic credentials.
 
-Customize `MIMO_PASS_ENTRY` (or the corresponding `DEEPSEEK_`, `GLM_`, or `CLAUDEX_` variable) and `CLAUDE_BACKEND_CREDENTIAL_ACCOUNT` as needed. Existing `*_KEYCHAIN_SERVICE` variables also set the Secret Service `service` attribute. Legacy `setup-*-keychain.sh` scripts still work and delegate to the cross-platform setup script.
+Customize `MIMO_PASS_ENTRY` (or the corresponding `DEEPSEEK_`, `GLM_`, or `CLAUDEX_` variable) and `CLAUDE_BACKEND_CREDENTIAL_ACCOUNT` as needed. Existing `*_KEYCHAIN_SERVICE` variables also set the Secret Service `service` attribute. Use the generic setup command; removed legacy aliases are listed in the [migration table](../README.md#migration-removed-script-paths).
 
 ## CLIProxyAPI / claudex
 
@@ -106,13 +106,13 @@ Running the proxy in the foreground helps with initial verification. For a persi
 ## Diagnostics and security
 
 ```bash
-./scripts/debug-mimo-auth-source.sh
-./scripts/debug-deepseek-auth-source.sh
-./scripts/debug-glm-auth-source.sh
-./scripts/test-mimo-api.sh
+./scripts/debug-auth-source.sh mimo
+./scripts/debug-auth-source.sh deepseek
+./scripts/debug-auth-source.sh glm
+./scripts/test-api.sh mimo
 ```
 
-Diagnostics only show the credential source, service, and `value=hidden`; they never print key characters. Configure your own key on Linux; macOS Keychain credentials do not transfer with a Git clone. Each host can use a separate key for easier revocation.
+Diagnostics show the credential source, service, and `value=hidden`; they never print key characters or raw store errors. Lookup failures include a store/exit-code summary so you can check entry existence, keyring unlock, or GPG decryption. Configure your own key on Linux; macOS Keychain credentials do not transfer with a Git clone. Each host can use a separate key for easier revocation.
 
 MiMo, DeepSeek, and `claudex` retain their default permission bypass unless you disable it. `ask-backend` explicitly selects Claude Code's default permission mode and only enables bypass when requested. Existing permission rules and project hooks still apply; default permission mode does not guarantee read-only execution.
 
@@ -126,7 +126,7 @@ The offline suite covers credential precedence, missing keys, setup through stdi
 
 ```bash
 docker run --rm -v "$PWD:/work:ro" -w /work python:3.12-slim bash -c \
-  'apt-get update -qq && apt-get install -y -qq --no-install-recommends pass gnupg dbus gnome-keyring libsecret-tools && python3 -B -m unittest discover -s tests -v && bash tests/linux-stores.sh'
+  'apt-get update -qq && apt-get install -y -qq --no-install-recommends curl jq pass gnupg dbus gnome-keyring libsecret-tools && python3 -B -m unittest discover -s tests -v && bash tests/linux-stores.sh'
 ```
 
 Sources: [Secret Service client manpage](https://dyn.manpages.debian.org/trixie/libsecret-tools/secret-tool.1.en.html), [pass documentation](https://www.passwordstore.org/).

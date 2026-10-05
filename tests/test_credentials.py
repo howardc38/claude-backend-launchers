@@ -8,6 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / "scripts/lib/credentials.sh"
+TEST_BASH = os.environ.get("CLAUDE_BACKEND_TEST_BASH", "bash")
 
 
 class Credentials(unittest.TestCase):
@@ -26,8 +27,8 @@ class Credentials(unittest.TestCase):
         self.fake("security", "exit 1")
         self.fake("secret-tool", "exit 1")
         self.fake("pass", "exit 1")
-        self.fake("claude", "exec python3 -c 'import os,json,sys; print(json.dumps({\"token\":os.environ.get(\"ANTHROPIC_AUTH_TOKEN\"),\"model\":os.environ.get(\"ANTHROPIC_MODEL\"),\"args\":sys.argv[1:]}))' \"$@\"")
-        self.fake("curl", 'printf \'{"data":[{"id":"gpt-5.6-sol"},{"id":"gpt-5.6-luna"}],"content":[{"type":"text","text":"OK"}]}\'')
+        self.fake("claude", "exec python3 -c 'import os,json,sys; keys=[\"ANTHROPIC_MODEL\",\"ANTHROPIC_DEFAULT_HAIKU_MODEL\",\"CLAUDE_CODE_SUBAGENT_MODEL\",\"CLAUDE_CODE_EFFORT_LEVEL\",\"CLAUDE_CODE_MAX_CONTEXT_TOKENS\",\"CLAUDE_CODE_AUTO_COMPACT_WINDOW\",\"CLAUDE_CODE_DISABLE_1M_CONTEXT\",\"CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY\",\"CLAUDE_STREAM_IDLE_TIMEOUT_MS\",\"CLAUDE_CODE_USE_BEDROCK\",\"CLAUDE_CODE_USE_VERTEX\",\"CLAUDE_CODE_USE_FOUNDRY\",\"CLAUDE_CODE_USE_ANTHROPIC_AWS\",\"CLAUDE_CODE_USE_MANTLE\"]; print(json.dumps({\"token\":os.environ.get(\"ANTHROPIC_AUTH_TOKEN\"),\"model\":os.environ.get(\"ANTHROPIC_MODEL\"),\"env\":{k:os.environ.get(k) for k in keys},\"args\":sys.argv[1:]}))' \"$@\"")
+        self.fake("curl", 'printf \'{"data":[{"id":"gpt-5.6-sol"},{"id":"gpt-5.6-luna"}],"content":[{"type":"text","text":"OK"}]}\\n200\'')
 
     def fake(self, name, body):
         path = self.bin / name
@@ -35,11 +36,11 @@ class Credentials(unittest.TestCase):
         path.chmod(0o755)
 
     def run_script(self, script, *args, input=None):
-        return subprocess.run(["bash", str(ROOT / script), *args], env=self.env,
+        return subprocess.run([TEST_BASH, str(ROOT / script), *args], env=self.env,
                               input=input, text=True, capture_output=True)
 
     def resolve(self, backend="mimo"):
-        return subprocess.run(["bash", "-euc",
+        return subprocess.run([TEST_BASH, "-euc",
                                'source "$1"; cb_load_auth "$2"; printf "%s:%s" "$CB_SOURCE" "$CB_TOKEN"',
                                "test", str(LIB), backend], env=self.env,
                               text=True, capture_output=True)
@@ -116,7 +117,7 @@ class Credentials(unittest.TestCase):
 
     def test_diagnostics_never_show_key(self):
         self.env["MIMO_ANTHROPIC_AUTH_TOKEN"] = "test-secret-do-not-show"
-        result = self.run_script("scripts/debug-mimo-auth-source.sh")
+        result = self.run_script("scripts/debug-auth-source.sh", "mimo")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("test-secret-do-not-show", result.stdout + result.stderr)
         self.assertIn("value=hidden", result.stdout)
@@ -134,17 +135,19 @@ class Credentials(unittest.TestCase):
         self.assertEqual(value["effort"], "max")
         self.assertEqual(value["context"], "1000000")
         self.assertEqual(value["timeout"], "3000000")
-        self.assertEqual(value["args"], ["--effort", "max"])
+        self.assertEqual(value["args"], ["--model", "glm-5.3[1m]", "--effort", "max"])
         result = self.run_script("glm-claude", "--effort", "high")
-        self.assertEqual(json.loads(result.stdout)["args"], ["--effort", "high"])
+        value = json.loads(result.stdout)
+        self.assertEqual(value["args"], ["--model", "glm-5.3[1m]", "--effort", "high"])
+        self.assertEqual(value["effort"], "high")
         self.env["GLM_EFFORT_LEVEL"] = "invalid"
         self.assertEqual(self.run_script("glm-claude").returncode, 2)
 
     def test_smoke_tests_share_credentials(self):
         self.fake("pass", 'printf test-pass-key')
         self.env["CLAUDE_BACKEND_CREDENTIAL_STORE"] = "pass"
-        for backend in ("mimo", "deepseek", "glm", "cliproxy"):
-            result = self.run_script(f"scripts/test-{backend}-api.sh")
+        for backend in ("mimo", "deepseek", "glm", "claudex"):
+            result = self.run_script("scripts/test-api.sh", backend)
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_setup_pass_receives_key_via_stdin_only(self):
@@ -169,11 +172,134 @@ class Credentials(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("Stored", result.stdout)
 
-    def test_legacy_setup_alias_works_on_linux(self):
+    def test_generic_setup_supports_each_backend(self):
         self.fake("pass", 'cat >/dev/null')
-        result = self.run_script("scripts/setup-mimo-keychain.sh", "pass", input="test-input-key\n")
+        for backend in ("mimo", "deepseek", "glm", "claudex"):
+            with self.subTest(backend=backend):
+                result = self.run_script("scripts/setup-credential.sh", backend, "pass", input="test-input-key\n")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"Stored {backend} credential in pass", result.stdout)
+
+    def test_effort_flags_override_backend_and_parent_environment(self):
+        self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="test-mimo", DEEPSEEK_ANTHROPIC_AUTH_TOKEN="test-deepseek",
+                        GLM_ANTHROPIC_AUTH_TOKEN="test-glm", CLAUDEX_PROXY_KEY="test-proxy",
+                        CLAUDE_CODE_EFFORT_LEVEL="low")
+        for launcher in ("mimo-claude", "deepseek-claude", "glm-claude", "claudex"):
+            for flags in (("--effort", "high"), ("--effort=high",)):
+                with self.subTest(launcher=launcher, flags=flags):
+                    result = self.run_script(launcher, *flags)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    value = json.loads(result.stdout)
+                    self.assertEqual(value["env"]["CLAUDE_CODE_EFFORT_LEVEL"], "high")
+                    self.assertEqual(value["args"].count("--effort"), 1)
+                    self.assertEqual(value["args"][value["args"].index("--effort") + 1], "high")
+
+    def test_cloud_selectors_are_cleared_directly_and_when_nested(self):
+        selectors = ("CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+                     "CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_MANTLE")
+        self.env.update({name: "1" for name in selectors})
+        self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="test-mimo", DEEPSEEK_ANTHROPIC_AUTH_TOKEN="test-deepseek",
+                        GLM_ANTHROPIC_AUTH_TOKEN="test-glm", CLAUDEX_PROXY_KEY="test-proxy")
+        for launcher in ("mimo-claude", "deepseek-claude", "glm-claude", "claudex"):
+            with self.subTest(launcher=launcher):
+                value = json.loads(self.run_script(launcher).stdout)
+                self.assertTrue(all(value["env"][name] is None for name in selectors))
+        for backend in ("mimo", "deepseek", "glm"):
+            with self.subTest(nested=backend):
+                result = self.run_script("ask-backend", backend, "test")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(all(json.loads(result.stdout)["env"][name] is None for name in selectors))
+
+    def test_proxy_model_flag_drives_preflight_and_subagents(self):
+        self.env["CLAUDEX_PROXY_KEY"] = "test-proxy"
+        self.fake("curl", 'printf \'{"data":[{"id":"gpt-5.6-luna"}]}\\n200\'')
+        for flags in (("--model", "gpt-5.6-luna"), ("--model=gpt-5.6-luna",), ("--luna",)):
+            result = self.run_script("claudex", *flags)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            value = json.loads(result.stdout)
+            self.assertEqual(value["model"], "gpt-5.6-luna")
+            self.assertEqual(value["env"]["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-luna")
+            self.assertEqual(value["args"].count("--model"), 1)
+
+    def test_delimiter_preserves_literal_prompt_and_permission_flags(self):
+        self.env["CLAUDEX_PROXY_KEY"] = "test-proxy"
+        result = self.run_script("claudex", "-p", "--", "--luna", "--permission-mode", "default")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Stored mimo credential in pass", result.stdout)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["model"], "gpt-5.6-sol")
+        self.assertEqual(value["args"][-5:], ["-p", "--", "--luna", "--permission-mode", "default"])
+        self.assertIn("--dangerously-skip-permissions", value["args"])
+        self.env["MIMO_ANTHROPIC_AUTH_TOKEN"] = "test-mimo"
+        result = self.run_script("ask-backend", "mimo", "--effort", "--effort", "high")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        value = json.loads(result.stdout)
+        self.assertEqual(value["args"][-2:], ["--", "--effort"])
+        self.assertEqual(value["env"]["CLAUDE_CODE_EFFORT_LEVEL"], "high")
+
+    def test_none_effort_and_missing_cli_values_are_rejected(self):
+        self.env["CLAUDEX_PROXY_KEY"] = "test-proxy"
+        self.env["CLAUDEX_EFFORT"] = "none"
+        self.assertEqual(self.run_script("claudex").returncode, 2)
+        self.env.pop("CLAUDEX_EFFORT")
+        for flags in (("--effort",), ("--effort=",), ("--model",), ("--model=",)):
+            self.assertEqual(self.run_script("claudex", *flags).returncode, 2)
+
+    def test_passthrough_values_are_not_launcher_options(self):
+        self.env.update(GLM_ANTHROPIC_AUTH_TOKEN="test-glm", CLAUDEX_PROXY_KEY="test-proxy")
+        for launcher in ("glm-claude", "claudex"):
+            for option, text in (("--append-system-prompt", "--effort=low"),
+                                 ("--append-subagent-system-prompt", "--effort=low"),
+                                 ("--system-prompt", "--model=gpt-5.6-luna"),
+                                 ("--settings", "--luna"), ("--tools", "")):
+                with self.subTest(launcher=launcher, option=option):
+                    result = self.run_script(launcher, option, text)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    value = json.loads(result.stdout)
+                    self.assertEqual(value["env"]["CLAUDE_CODE_EFFORT_LEVEL"], "max")
+                    self.assertEqual(value["model"], "glm-5.3[1m]" if launcher == "glm-claude" else "gpt-5.6-sol")
+                    self.assertEqual(value["args"][-2:], [option, text])
+
+    def test_nested_permission_defaults_ignore_opaque_values(self):
+        self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="test-mimo", DEEPSEEK_ANTHROPIC_AUTH_TOKEN="test-deepseek",
+                        GLM_ANTHROPIC_AUTH_TOKEN="test-glm")
+        for backend in ("mimo", "deepseek", "glm"):
+            for text in ("--dangerously-skip-permissions", "--permission-mode=acceptEdits"):
+                with self.subTest(backend=backend, text=text):
+                    result = self.run_script("ask-backend", backend, "test", "--append-system-prompt", text)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    args = json.loads(result.stdout)["args"]
+                    self.assertEqual(args[4:], ["--permission-mode", "default", "-p",
+                                               "--append-system-prompt", text, "--", "test"])
+
+    def test_fast_model_and_context_override_are_effective(self):
+        self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="test-mimo", MIMO_FAST_MODEL="mimo-v2.5",
+                        MIMO_MAX_CONTEXT_TOKENS="512000")
+        result = self.run_script("mimo-claude")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        values = json.loads(result.stdout)["env"]
+        self.assertEqual(values["ANTHROPIC_DEFAULT_HAIKU_MODEL"], "mimo-v2.5")
+        self.assertEqual(values["CLAUDE_CODE_SUBAGENT_MODEL"], "mimo-v2.5")
+        self.assertEqual(values["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "512000")
+        self.assertEqual(values["CLAUDE_CODE_DISABLE_1M_CONTEXT"], "1")
+
+    def test_zero_spellings_are_rejected(self):
+        self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="test-mimo", CLAUDEX_PROXY_KEY="test-proxy")
+        for name, launcher in (("MIMO_MAX_RETRIES", "mimo-claude"), ("MIMO_TOOL_CONCURRENCY", "mimo-claude"),
+                               ("CLAUDEX_CONCURRENCY", "claudex"), ("CLAUDEX_MAX_CONTEXT_TOKENS", "claudex")):
+            for zero in ("0", "00", "000"):
+                with self.subTest(name=name, zero=zero):
+                    self.env[name] = zero
+                    self.assertEqual(self.run_script(launcher).returncode, 2)
+            self.env.pop(name)
+
+    def test_store_failures_are_reported_without_raw_stderr(self):
+        self.env["CLAUDE_BACKEND_CREDENTIAL_STORE"] = "pass"
+        self.fake("pass", 'printf "gpg: decryption failed; test-secret-do-not-show" >&2; exit 42')
+        result = self.run_script("scripts/debug-auth-source.sh", "mimo")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("pass (exit 42)", result.stderr)
+        self.assertIn("GPG decryption", result.stderr)
+        self.assertNotIn("test-secret-do-not-show", result.stdout + result.stderr)
 
     def test_ask_backend_uses_default_permissions(self):
         self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="correct-provider", ANTHROPIC_AUTH_TOKEN="parent-provider")

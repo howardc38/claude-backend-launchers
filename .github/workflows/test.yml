@@ -8,14 +8,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      CLAUDE_BACKEND_TEST_BASH: /bin/bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install HTTP test dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends curl jq
+      - name: Install JSON parser (macOS)
+        if: runner.os == 'macOS'
+        run: command -v jq >/dev/null || brew install jq
       - run: python3 -m unittest discover -s tests -v
       - run: |
-          for script in scripts/*.sh scripts/lib/*.sh; do bash -n "$script" || exit; done
+          for script in scripts/*.sh scripts/lib/*.sh tests/*.sh ask-backend claudex mimo-claude deepseek-claude glm-claude; do /bin/bash -n "$script" || exit; done
   linux-stores:
     runs-on: ubuntu-latest
     steps:

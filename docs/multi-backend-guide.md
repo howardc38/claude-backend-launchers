@@ -1,207 +1,142 @@
-# Claude Code multi-backend guide
+# Backend and proxy operations
 
-Supports macOS, Linux, and WSL. See the [Linux guide](linux.md) for Linux credentials, command installation, and CLIProxyAPI setup. The `setup-*-keychain.sh` scripts remain available as aliases; prefer `scripts/setup-credential.sh <backend>`. API smoke tests and diagnostics share the same credential resolver.
+For installation and the command overview, see [README](../README.md). Linux/WSL credential-store and service setup is covered in the [Linux guide](linux.md).
 
-> Updated: 2026-10-03. The Codex integration uses Tibo's published approach: CLIProxyAPI + Codex OAuth + `claudex`.
+## Model and launch settings
 
-## Choose a launcher
+The canonical defaults are in [backends.sh](../scripts/lib/backends.sh). Launchers and API smoke tests use the same backend profile.
 
-| Command | Backend | Default model / settings |
+| Backend | Main model | Fast / Haiku | Subagents | Default effort | Permission bypass |
+|---|---|---|---|---|---|
+| MiMo | `mimo-v2.6-pro[1m]` | Selected main model | Selected fast model | `max` | Enabled |
+| DeepSeek | `deepseek-v4-flash[1m]` | `deepseek-v4-flash` | Selected fast model | `max` | Enabled |
+| GLM | `glm-5.3[1m]` | `glm-5.3-flash[1m]` | Selected main model | `max` | Disabled |
+| Codex proxy | `gpt-5.6-sol` | Selected main model | Selected main model | `max` | Enabled |
+
+Direct backends use the `MIMO_`, `DEEPSEEK_`, and `GLM_` prefixes. The proxy uses `CLAUDEX_`.
+
+| Setting | Direct backends | Codex proxy |
 |---|---|---|
-| `claude` | Anthropic | Native Claude Code; unaffected by this repository |
-| `claudex` | ChatGPT / Codex OAuth | `gpt-5.6-sol`; main session / subagents use `max`; permission bypass enabled by default |
-| `claudex --luna` | ChatGPT / Codex OAuth | `gpt-5.6-luna`; otherwise the same settings |
-| `mimo-claude` | Xiaomi MiMo | `mimo-v2.6-pro[1m]`; main / fast / subagents all use Pro; client effort `max`; permission bypass enabled by default |
-| `deepseek-claude` | DeepSeek | `deepseek-v4-flash[1m]`; subagents / fast tier use Flash; effort `max`; permission bypass enabled by default |
-| `glm-claude` | Z.AI | `glm-5.3[1m]`; fast tier uses `glm-5.3-flash[1m]`; effort `max` |
-| `ask-backend` | MiMo / DeepSeek / GLM | Headless child agent; default permission mode, without automatic bypass |
+| Main model | `<PREFIX>_MODEL` | `CLAUDEX_MODEL`, `--sol`, `--luna`, `--terra` |
+| Fast model | `<PREFIX>_FAST_MODEL` | Follows the main model |
+| Subagent model | `<PREFIX>_SUBAGENT_MODEL` | Follows the main model |
+| Effort | `<PREFIX>_EFFORT_LEVEL` | `CLAUDEX_EFFORT` |
+| Endpoint | `<PREFIX>_BASE_URL` | `CLAUDEX_BASE_URL` |
+| Context window | `<PREFIX>_MAX_CONTEXT_TOKENS` | `CLAUDEX_MAX_CONTEXT_TOKENS` |
+| Auto-compact window | `<PREFIX>_AUTO_COMPACT_WINDOW` | `CLAUDEX_AUTO_COMPACT_WINDOW` |
+| Client request timeout | `<PREFIX>_API_TIMEOUT_MS` | `CLAUDEX_API_TIMEOUT_MS` |
+| Tool concurrency | `<PREFIX>_TOOL_CONCURRENCY` | `CLAUDEX_CONCURRENCY` |
+| Permission bypass | `<PREFIX>_SKIP_PERMISSIONS` | `CLAUDEX_SKIP_PERMISSIONS` |
 
-## Tibo's approach
-
-Tibo's July 12, 2026 post describes installing CLIProxyAPI, connecting an account, and using a `claudex` alias to point Claude Code's main model and subagents at `gpt-5.6-sol`, enable effort, set tool concurrency to 3, and disable tool search. Theo's post, cited by Tibo, uses the same approach: CLIProxyAPI understands both Claude and OpenAI formats; sign in with Codex OAuth, then point Claude Code at the local proxy.
-
-This repository keeps that architecture and makes additional settings explicit:
-
-- Default effort is `max`, with the same model for the main session and subagents.
-- `--dangerously-skip-permissions` is enabled by default.
-- `gpt-5.6-sol` is the default; `--luna` / `--terra` switch models.
-- The Claude Code context ceiling is set to `1050000`, matching the OpenAI model specification.
-- The local client key is loaded through the credential resolver; the proxy and model are checked before launch.
-- Inherited endpoint and cloud-provider settings are cleared to prevent nested sessions from connecting to the wrong backend.
-- The proxy listens only on `127.0.0.1:8317`; the configuration template disables remote management, application file logging, and usage statistics. Request-error logs are still retained.
-
-```text
-Claude Code (claudex)
-        |
-        | Anthropic /v1/messages
-        v
-CLIProxyAPI 127.0.0.1:8317
-        |
-        | protocol translation + Codex OAuth
-        v
-OpenAI Codex: gpt-5.6-sol / gpt-5.6-luna
-```
-
-This is an unofficial workaround, without official Anthropic or OpenAI support as a Claude Code integration. Upstream policies, OAuth behavior, and model entitlements can change. Keep native `claude` / `codex` available as fallbacks for important work.
-
-## macOS installation layout
-
-| Location | Purpose |
-|---|---|
-| `/opt/homebrew/bin/cliproxyapi` | Homebrew CLIProxyAPI binary |
-| `/opt/homebrew/etc/cliproxyapi.conf` | Active config; permissions `0600` |
-| `~/.cli-proxy-api/` | Proxy-managed Codex OAuth; directory `0700`, credential files `0600` |
-| Keychain service `cliproxyapi-claudex` | Random key for the local client to connect to the proxy |
-| `~/.local/bin/claudex` | Symlink to this repository's launcher |
-
-Derive the active config from `config/cliproxyapi.conf.example`. The repository template contains only placeholders, never real keys.
-
-`logging-to-file: false` disables application file logging. The template still retains up to 10 request-error logs, which may include prompt and request bodies. Treat those logs as sensitive; see the [upstream logging configuration](https://github.com/router-for-me/CLIProxyAPI/blob/main/config.example.yaml).
-
-## Daily usage
+Explicit `--model` and `--effort` flags win over backend defaults/environment settings. The resolved values are used both in Claude's command-line arguments and its environment, avoiding the upstream environment-over-flag precedence conflict. Supported client effort values are `low`, `medium`, `high`, `xhigh`, and `max`; provider support can vary. `none` is rejected. Put literal option-like prompt text after `--`:
 
 ```bash
-claudex                                  # Sol; max; bypass enabled by default
-claudex --luna                           # Luna; max; bypass enabled by default
-claudex --terra                          # Terra, if available to your account
-claudex --luna -p "Reply OK"              # Headless
-
-CLAUDEX_SKIP_PERMISSIONS=0 claudex         # Restore permission prompts
-CLAUDEX_EFFORT=high claudex                # Lower effort for this session
-CLAUDEX_CONCURRENCY=2 claudex              # Change tool concurrency for this session
-CLAUDEX_MODEL=gpt-5.6-luna claudex         # Select a model through the environment
-CLAUDEX_MAX_CONTEXT_TOKENS=500000 claudex  # Lower the context ceiling for this session
+glm-claude --effort high
+claudex --model gpt-6.1-sol --effort high
+claudex -p -- --luna
 ```
 
-`claudex` passes other flags through to Claude Code. Permission bypass lets Claude Code run tools or edit files without individual confirmations; use it only with repositories and prompts you trust. To keep permission prompts enabled by default, set `CLAUDEX_SKIP_PERMISSIONS=0` permanently.
+All launchers clear inherited Bedrock, Vertex, Foundry, Anthropic-on-AWS, and Mantle selectors. They set their own endpoint, credentials, models, effort, context, and timeout. User or managed Claude settings can still impose policy; the launchers do not bypass those settings.
 
-The official Sol and Luna API model pages list reasoning effort from `none` through `max` and a 1.05M context window. Claude Code 2.1.232 did not recognize these model IDs, so the launcher explicitly sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS=1050000` to avoid the 200K fallback for unknown models. Model IDs follow Tibo's original approach without adding a `[1m]` suffix. The Claude Code → third-party proxy → subscription OAuth path is unofficial; actual context availability and quotas depend on CLIProxyAPI, Claude Code, and account entitlements.
+Numeric overrides require positive decimal integers; `0`, `00`, and other all-zero spellings are rejected. Boolean overrides require `0` or `1`.
 
-## Service management, sign-in, and tests
+## Context window settings
+
+MiMo declares `1048576` tokens and compacts at `786432`; DeepSeek and GLM declare/compact at `1000000`; the Codex proxy declares/compacts at `1050000`.
+
+For unknown custom model IDs containing `[1m]`, Claude Code otherwise assumes a 1M window and ignores the context variable on its own. When the resolved window differs from 1M, the launcher also sets `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`, allowing the declared window to apply. The actual installed-Claude regression test checks a lowered MiMo window. IDs that resolve to recognized Claude models retain Claude Code's native context rules. See the [official context guide](https://code.claude.com/docs/en/model-config#correct-the-window-for-a-gateway-or-custom-model-id).
+
+```bash
+MIMO_MAX_CONTEXT_TOKENS=512000 MIMO_AUTO_COMPACT_WINDOW=400000 mimo-claude
+GLM_MAX_CONTEXT_TOKENS=512000 GLM_AUTO_COMPACT_WINDOW=400000 glm-claude
+```
+
+The auto-compact window is separate from context capacity and is capped by Claude Code. Model availability, provider limits, and account quotas remain authoritative.
+
+## MiMo transport safeguards
+
+MiMo retains provider-specific defaults in [claude-mimo.sh](../scripts/claude-mimo.sh):
+
+- Request timeout: 10 minutes.
+- First-byte / stream-idle watchdogs: 90 seconds each.
+- Maximum retries: 3.
+- Tool concurrency: 3.
+- Non-streaming fallback allowed after a streaming failure.
+
+Override with `MIMO_API_TIMEOUT_MS`, `MIMO_STREAM_FIRST_BYTE_TIMEOUT_MS`, `MIMO_STREAM_IDLE_TIMEOUT_MS`, `MIMO_MAX_RETRIES`, `MIMO_TOOL_CONCURRENCY`, and `MIMO_DISABLE_NONSTREAMING_FALLBACK`.
+
+MiMo currently maps non-`none` effort levels to the same thinking-enabled server mode. A client setting of `max` does not establish a separate server-side maximum compute tier.
+
+GLM retains a 50-minute client request timeout. DeepSeek and the proxy use a 10-minute client timeout. The explicit API smoke command has a separate 60-second HTTP deadline for every backend.
+
+## Headless backend calls
+
+```bash
+ask-backend --list
+ask-backend mimo "explain this error in one sentence"
+ask-backend deepseek "review this function"
+ask-backend glm "compare these two approaches"
+ask-backend glm "update this file" --permission-mode acceptEdits
+```
+
+`ask-backend` clears generic parent Anthropic credentials and uses the selected direct backend's canonical endpoint. It defaults to `--permission-mode default`; existing permission rules and hooks still apply. File edits are not categorically prohibited. Add an explicit editing or bypass flag only when intended. The prompt is passed after `--` and stdin is `/dev/null` so option-like text stays literal and the child does not wait for piped input.
+
+## Proxy configuration
+
+The proxy path follows Tibo's published approach: Claude Code → Anthropic `/v1/messages` → CLIProxyAPI → Codex OAuth. This is an unofficial integration, and upstream policy/entitlement behavior can change.
+
+[cliproxyapi.conf.example](../config/cliproxyapi.conf.example) uses the CLIProxyAPI 7.2.130 configuration layout. Verify your installed version before copying it; newer upstream versions may organize settings differently.
+
+| macOS location | Purpose |
+|---|---|
+| `/opt/homebrew/bin/cliproxyapi` | Homebrew binary |
+| `/opt/homebrew/etc/cliproxyapi.conf` | Private active config, mode `0600` |
+| `~/.cli-proxy-api/` | Proxy-managed OAuth; directory `0700`, credential files `0600` |
+| Credential service `cliproxyapi-claudex` | Local client key |
+| `~/.local/bin/claudex` | Symlink to the public launcher |
+
+Keep the listener on `127.0.0.1:8317`, remote management disabled, and the client key in the OS store. The checked-in template only contains a placeholder key.
+
+`logging-to-file: false` disables application file logging. The template retains up to 10 request-error logs, which may include prompt/request bodies. Treat these as sensitive; see the [upstream logging configuration](https://github.com/router-for-me/CLIProxyAPI/blob/main/config.example.yaml).
 
 ```bash
 brew services info cliproxyapi
 brew services restart cliproxyapi
+cliproxyapi -codex-login
+cliproxyapi -codex-device-login
 
-cliproxyapi -codex-login          # Browser OAuth
-cliproxyapi -codex-device-login   # Headless / device flow
-
-./scripts/debug-cliproxy.sh
-./scripts/test-cliproxy-api.sh --sol
-./scripts/test-cliproxy-api.sh --luna
+CLAUDEX_MODEL=gpt-6.1-sol ./scripts/debug-cliproxy.sh
+./scripts/test-api.sh claudex --luna
 ```
 
-If `claudex` reports that the proxy is unreachable, check the service status and restart it. If it reports an unavailable model, sign in again. The debug script checks proxy connectivity and Sol / Luna availability; it does not print the full model inventory. Diagnostics report credential presence without printing secrets.
+Diagnostics show the full model inventory and check the configured model. Launch preflight checks the exact native model ID selected through flags or the environment. The same selected model is used for the main session and subagents.
 
-Upgrade with:
+## Credentials and HTTP checks
 
-```bash
-brew update
-brew upgrade cliproxyapi
-brew services restart cliproxyapi
-./scripts/test-cliproxy-api.sh --luna
-```
+| Backend | Dedicated environment variable | Default service |
+|---|---|---|
+| MiMo | `MIMO_ANTHROPIC_AUTH_TOKEN` | `mimo-claude-code` |
+| DeepSeek | `DEEPSEEK_ANTHROPIC_AUTH_TOKEN` | `deepseek-claude-code` |
+| GLM | `GLM_ANTHROPIC_AUTH_TOKEN` | `glm-claude-code` |
+| Proxy | `CLAUDEX_PROXY_KEY` | `cliproxyapi-claudex` |
 
-## Direct backends
+Use `scripts/setup-credential.sh <backend>` and `scripts/debug-auth-source.sh <backend>`. Diagnostics never print credential values or raw store stderr. A failed lookup reports the store and exit code; check entry existence, keyring unlock, or GPG decryption rather than assuming the key is absent. Store selection and precedence are documented in the [Linux guide](linux.md).
 
-### MiMo
-
-```bash
-./scripts/setup-mimo-keychain.sh
-./scripts/test-mimo-api.sh
-mimo-claude
-```
-
-Defaults to `mimo-v2.6-pro[1m]` for the main session, fast tier, and subagents. Claude Code client effort defaults to `max`. The launcher exports `CLAUDE_CODE_MAX_CONTEXT_TOKENS=1048576`, sets an auto-compact window of `786432`, and enables `--dangerously-skip-permissions`; see [context window settings](#context-window-settings) for how Claude Code resolves the effective window. MiMo currently treats non-`none` effort levels alike: `max` maps to server-side `high` / thinking enabled. It is the highest client setting, without a separate server-side max compute tier.
-
-For intermittent silent SSE streams, 5xx errors, or bursts of tool calls, the launcher defaults to:
-
-- A 10-minute request timeout.
-- A 90-second timeout for the first byte or an idle stream, after which the attempt is aborted.
-- A maximum of 3 retries, avoiding ten attempts on a failing request.
-- Non-streaming fallback when streaming fails.
-- Tool concurrency of 3 to limit simultaneous calls while permission bypass is enabled.
-
-Override settings for a session:
-
-```bash
-MIMO_MODEL='<model>' mimo-claude
-MIMO_EFFORT_LEVEL=high mimo-claude
-MIMO_AUTO_COMPACT_WINDOW=524288 mimo-claude
-MIMO_MAX_RETRIES=1 mimo-claude
-MIMO_TOOL_CONCURRENCY=1 mimo-claude
-```
-
-Restore permission prompts for a session:
-
-```bash
-MIMO_SKIP_PERMISSIONS=0 mimo-claude
-```
-
-### DeepSeek
-
-```bash
-./scripts/setup-deepseek-keychain.sh
-./scripts/test-deepseek-api.sh
-deepseek-claude
-```
-
-Defaults to `deepseek-v4-flash[1m]` with `max` effort; subagents / fast tier use `deepseek-v4-flash`. To use Pro:
-
-```bash
-DEEPSEEK_MODEL='deepseek-v4-pro[1m]' deepseek-claude
-```
-
-The launcher enables `--dangerously-skip-permissions` by default. Restore permission prompts for a session:
-
-```bash
-DEEPSEEK_SKIP_PERMISSIONS=0 deepseek-claude
-```
-
-### GLM / Z.AI
-
-```bash
-./scripts/setup-glm-keychain.sh
-./scripts/test-glm-api.sh
-glm-claude
-```
-
-The main model and subagents default to `glm-5.3[1m]`; the fast model is `glm-5.3-flash[1m]`. Effort is explicitly set to `max`, with context and auto-compact windows of 1M. Override with `GLM_MODEL`, `GLM_FAST_MODEL`, `GLM_SUBAGENT_MODEL`, or `GLM_EFFORT_LEVEL`; for example, `GLM_MODEL='glm-5.3-flash[1m]' glm-claude`.
-
-Set effort through the backend-specific environment variable, for example `GLM_EFFORT_LEVEL=high glm-claude`. The launchers also export `CLAUDE_CODE_EFFORT_LEVEL`, which takes precedence over `--effort`; a CLI flag alone does not override it. See [Claude Code's configuration precedence](https://code.claude.com/docs/en/env-vars#precedence).
-
-According to the [official Z.AI settings](https://docs.z.ai/devpack/latest-model), both 5.3 and 5.3 Flash support 1M context, and `xhigh` / `max` / `ultra` map to the highest `max` level. For HTTP 429 responses, also inspect the error code: `1113` means insufficient balance or no resource package. Avoid treating it as a transient rate limit and retrying repeatedly; check your Coding Plan, quota, and payment status in the Console.
-
-### Context window settings
-
-For an unknown model ID containing `[1m]`, recent Claude Code versions assume a 1M window and ignore `CLAUDE_CODE_MAX_CONTEXT_TOKENS` on its own. Changing `MIMO_MAX_CONTEXT_TOKENS` or `GLM_MAX_CONTEXT_TOKENS` alone therefore does not change the effective window for their default models. The [official context configuration guide](https://code.claude.com/docs/en/model-config#correct-the-window-for-a-gateway-or-custom-model-id) explains how `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` makes an explicit window override apply. The auto-compact window is a separate setting.
-
-## Call another backend from a session
-
-```bash
-ask-backend --list
-ask-backend deepseek "review this function"
-ask-backend mimo "explain this error in one sentence"
-ask-backend glm "compare these two approaches"
-```
-
-`ask-backend` runs headless and defaults to `--permission-mode default`, without adding permission bypass. Existing permission rules still apply, so this is not a read-only sandbox. Add `--permission-mode acceptEdits` to allow file edits automatically, or `--dangerously-skip-permissions` to bypass checks, with the same risks as `claudex`. Prompts and code are sent from your machine to the selected third-party backend.
-
-The direct launchers replace Anthropic endpoint and model settings but currently retain inherited cloud-provider selectors. If you have `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY` set, unset them before using MiMo, DeepSeek, or GLM to avoid selecting the parent's cloud provider.
+The shared HTTP helper passes authentication via `/dev/fd/3`, disables user curl configuration, and never puts the credential header in curl's argv. POST JSON uses stdin. MiMo uses `api-key`, DeepSeek/proxy use `Authorization: Bearer`, and GLM uses `x-api-key`. Smoke requests strip `[1m]` and request a short non-thinking reply. Non-2xx responses, malformed model inventories, and missing/unexpected text fail the check.
 
 ## Security boundaries
 
-- Keep CLIProxyAPI on loopback. Do not change its host to `0.0.0.0` or enable remote management.
-- Never commit `/opt/homebrew/etc/cliproxyapi.conf`, `~/.cli-proxy-api/`, Keychain exports, `.env`, or token files.
-- The local client key protects access to the local proxy; upstream access comes from the Codex OAuth file.
-- Permission bypass is an optional convenience, not a proxy requirement. Disable it for untrusted repositories.
-- Using OAuth / subscriptions through third-party tools may carry account or terms-of-service risks. If you encounter policy or entitlement errors, use an official client or API instead of attempting to bypass them.
+- Keep active configs, OAuth files, API keys, Keychain exports, and token files outside Git.
+- The local client key protects access to the proxy; upstream authority comes from the OAuth account.
+- Permission bypass remains a documented launcher choice; disable it for untrusted work.
+- Prompts and code are sent to the configured provider. The proxy may retain failed request bodies locally.
+- Use official clients/APIs when policy or entitlement errors arise.
 
 ## References
 
-- [Tibo's original three steps and alias](https://x.com/thsottiaux/status/2076119366647894371)
-- [Theo's CLIProxyAPI / Claude Code explanation cited by Tibo](https://x.com/theo/status/2076114415368482854)
+- [Tibo's original steps and alias](https://x.com/thsottiaux/status/2076119366647894371)
+- [Theo's CLIProxyAPI / Claude Code explanation](https://x.com/theo/status/2076114415368482854)
 - [CLIProxyAPI repository](https://github.com/router-for-me/CLIProxyAPI)
 - [CLIProxyAPI guides](https://help.router-for.me/)
-- [OpenAI GPT-5.6 Sol model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
-- [OpenAI GPT-5.6 Luna model page](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+- [Claude environment precedence](https://code.claude.com/docs/en/env-vars#precedence)
+- [Z.AI model and effort settings](https://docs.z.ai/devpack/latest-model)

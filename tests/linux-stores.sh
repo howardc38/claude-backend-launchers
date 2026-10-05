@@ -29,7 +29,7 @@ dbus-run-session -- bash -eu -c '
   source "$1/scripts/lib/credentials.sh"
   cb_load_auth deepseek
   [[ "$CB_TOKEN" == test-only-secret-service-credential && "$CB_SOURCE" == secret-service ]]
-  "$1/scripts/debug-deepseek-auth-source.sh" | grep -q "value=hidden"
+  "$1/scripts/debug-auth-source.sh" deepseek | grep -q "value=hidden"
   printf "PASS real Secret Service round trip\n"
 ' test "$repo_dir"
 gpgconf --kill gpg-agent

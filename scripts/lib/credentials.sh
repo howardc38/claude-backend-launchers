@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
-# Shared by launchers, setup, diagnostics and API smoke tests (Bash 3.2+).
-# CB_TOKEN is private to the caller; never print it from diagnostics.
+# Shared credential precedence; diagnostic failures never print store stderr.
+cb_credentials_lib_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$cb_credentials_lib_dir/backends.sh"
 
 cb_backend() {
-  CB_BACKEND="$1"
-  case "$1" in
-    mimo) CB_PREFIX=MIMO; CB_ENV=MIMO_ANTHROPIC_AUTH_TOKEN; CB_SERVICE=mimo-claude-code ;;
-    deepseek) CB_PREFIX=DEEPSEEK; CB_ENV=DEEPSEEK_ANTHROPIC_AUTH_TOKEN; CB_SERVICE=deepseek-claude-code ;;
-    glm) CB_PREFIX=GLM; CB_ENV=GLM_ANTHROPIC_AUTH_TOKEN; CB_SERVICE=glm-claude-code ;;
-    claudex) CB_PREFIX=CLAUDEX; CB_ENV=CLAUDEX_PROXY_KEY; CB_SERVICE=cliproxyapi-claudex ;;
-    *) printf 'Unknown backend: %s\n' "$1" >&2; return 2 ;;
-  esac
-  local service_var="${CB_PREFIX}_KEYCHAIN_SERVICE"
-  local entry_var="${CB_PREFIX}_PASS_ENTRY"
+  cb_profile "$1" || return $?
+  local service_var="${CB_PREFIX}_KEYCHAIN_SERVICE" entry_var="${CB_PREFIX}_PASS_ENTRY"
   CB_SERVICE="${!service_var:-$CB_SERVICE}"
   CB_PASS_ENTRY="${!entry_var:-claude-backends/$CB_BACKEND}"
   CB_ACCOUNT="${CLAUDE_BACKEND_CREDENTIAL_ACCOUNT:-$(id -un)}"
@@ -24,33 +17,37 @@ cb_backend() {
 }
 
 cb_read_store() {
-  local store="$1"
+  local store="$1" status
+  local command=()
   CB_TOKEN=""
   case "$store" in
     keychain)
       [[ "$(uname -s)" == Darwin ]] && command -v security >/dev/null 2>&1 || return 1
-      CB_TOKEN="$(security find-generic-password -a "$CB_ACCOUNT" -s "$CB_SERVICE" -w 2>/dev/null)" || return 1
-      ;;
+      command=(security find-generic-password -a "$CB_ACCOUNT" -s "$CB_SERVICE" -w) ;;
     secret-service)
       command -v secret-tool >/dev/null 2>&1 || return 1
-      CB_TOKEN="$(secret-tool lookup service "$CB_SERVICE" account "$CB_ACCOUNT" 2>/dev/null)" || return 1
-      ;;
+      command=(secret-tool lookup service "$CB_SERVICE" account "$CB_ACCOUNT") ;;
     pass)
       command -v pass >/dev/null 2>&1 || return 1
-      CB_TOKEN="$(pass show "$CB_PASS_ENTRY" 2>/dev/null)" || return 1
-      # pass permits notes below the password; only the first line is the key.
-      CB_TOKEN="${CB_TOKEN%%$'\n'*}"
-      ;;
+      command=(pass show "$CB_PASS_ENTRY") ;;
     *) return 1 ;;
   esac
+  if CB_TOKEN="$("${command[@]}" 2>/dev/null)"; then
+    [[ "$store" != pass ]] || CB_TOKEN="${CB_TOKEN%%$'\n'*}"
+  else
+    status=$?
+    CB_TOKEN=""
+    CB_STORE_FAILURES="${CB_STORE_FAILURES:+$CB_STORE_FAILURES; }$store (exit $status)"
+    return 1
+  fi
   [[ -n "$CB_TOKEN" ]] || return 1
   CB_SOURCE="$store"
 }
 
 cb_load_auth() {
   cb_backend "$1" || return $?
-  CB_TOKEN="${!CB_ENV:-}"
-  CB_SOURCE="$CB_ENV"
+  CB_STORE_FAILURES=""
+  CB_TOKEN="${!CB_ENV:-}"; CB_SOURCE="$CB_ENV"
   [[ -z "$CB_TOKEN" ]] || return 0
   if [[ "$CB_STORE" == auto ]]; then
     if [[ "$(uname -s)" == Darwin ]]; then
@@ -62,7 +59,7 @@ cb_load_auth() {
   elif [[ "$CB_STORE" != env ]]; then
     cb_read_store "$CB_STORE" && return 0
   fi
-  # Legacy standalone API env support. Never use Anthropic auth for claudex.
+  # Legacy standalone API environment support; never reuse it for claudex.
   if [[ "$CB_BACKEND" != claudex ]]; then
     for CB_SOURCE in ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY; do
       CB_TOKEN="${!CB_SOURCE:-}"
@@ -70,6 +67,9 @@ cb_load_auth() {
     done
   fi
   CB_TOKEN=""; CB_SOURCE=none
-  printf 'No credential for %s. Run scripts/setup-credential.sh %s, or set %s.\n' "$CB_BACKEND" "$CB_BACKEND" "$CB_ENV" >&2
+  printf 'No credential could be loaded for %s. Run scripts/setup-credential.sh %s, or set %s.\n' "$CB_BACKEND" "$CB_BACKEND" "$CB_ENV" >&2
+  if [[ -n "$CB_STORE_FAILURES" ]]; then
+    printf 'Credential store lookup failed: %s. Check the entry, keyring unlock, or GPG decryption.\n' "$CB_STORE_FAILURES" >&2
+  fi
   return 1
 }
