@@ -9,9 +9,11 @@ The canonical defaults are in [backends.sh](../scripts/lib/backends.sh). Launche
 | Backend | Main model | Fast / Haiku | Subagents | Default effort | Permission bypass |
 |---|---|---|---|---|---|
 | MiMo | `mimo-v2.6-pro[1m]` | Selected main model | Selected fast model | `max` | Enabled |
-| DeepSeek | `deepseek-v4-flash[1m]` | `deepseek-v4-flash` | Selected fast model | `max` | Enabled |
+| DeepSeek | `deepseek-flash[1m]` (V4.1 Flash) | `deepseek-flash` | Selected fast model | `max` | Enabled |
 | GLM | `glm-5.3[1m]` | `glm-5.3-flash[1m]` | Selected main model | `max` | Disabled |
-| Codex proxy | `gpt-5.6-sol` | Selected main model | Selected main model | `max` | Enabled |
+| Codex proxy | `gpt-6.1-sol` | Selected main model | Selected main model | `max` | Enabled |
+
+Verified on 2026-10-06: DeepSeek now recommends the stable `deepseek-flash` API name, currently served by V4.1 Flash. Legacy `deepseek-v4-flash` requests are also served by V4.1 Flash. Sol defaults to GPT-6.1, Luna selects `gpt-6-luna`, and Terra remains the legacy `gpt-5.6-terra` option. Version-specific GPT-5.6 selector flags keep selecting their named versions. See [DeepSeek's model details](https://api-docs.deepseek.com/quick_start/pricing/) and [OpenAI's current model guide](https://developers.openai.com/api/docs/guides/latest-model).
 
 Direct backends use the `MIMO_`, `DEEPSEEK_`, and `GLM_` prefixes. The proxy uses `CLAUDEX_`.
 
@@ -111,6 +113,8 @@ CLAUDEX_MODEL=gpt-6.1-sol ./scripts/debug-cliproxy.sh
 
 Diagnostics show the full model inventory and check the configured model. Launch preflight checks the exact native model ID selected through flags or the environment. The same selected model is used for the main session and subagents.
 
+Some local compatibility builds advertise OpenAI models as `claude-fable-5-dd-<reversed-native-id>` while accepting native IDs on `/v1/messages`. Preflight also recognizes that exact OpenAI-owned inventory envelope; requests still use the selected native model ID. For arbitrary custom aliases, select the advertised ID explicitly with `CLAUDEX_MODEL` or `--model`.
+
 ## Credentials and HTTP checks
 
 | Backend | Dedicated environment variable | Default service |
@@ -122,7 +126,7 @@ Diagnostics show the full model inventory and check the configured model. Launch
 
 Use `scripts/setup-credential.sh <backend>` and `scripts/debug-auth-source.sh <backend>`. Diagnostics never print credential values or raw store stderr. A failed lookup reports the store and exit code; check entry existence, keyring unlock, or GPG decryption rather than assuming the key is absent. Store selection and precedence are documented in the [Linux guide](linux.md).
 
-The shared HTTP helper passes authentication via `/dev/fd/3`, disables user curl configuration, and never puts the credential header in curl's argv. POST JSON uses stdin. MiMo uses `api-key`, DeepSeek/proxy use `Authorization: Bearer`, and GLM uses `x-api-key`. Smoke requests strip `[1m]` and request a short non-thinking reply. Non-2xx responses, malformed model inventories, and missing/unexpected text fail the check.
+The shared HTTP helper passes authentication via `/dev/fd/3`, disables user curl configuration, and never puts the credential header in curl's argv. POST JSON uses stdin. MiMo uses `api-key`, DeepSeek/proxy use `Authorization: Bearer`, and GLM uses `x-api-key`. Smoke requests strip `[1m]`. GPT-6.1 Sol/Astra and the compatibility inventory aliases use adaptive thinking with low effort; native Luna/legacy Codex IDs and direct backends retain thinking-disabled requests. Non-2xx responses, malformed model inventories, and missing/unexpected text fail the check.
 
 ## Security boundaries
 

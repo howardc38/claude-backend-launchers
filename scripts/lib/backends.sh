@@ -10,7 +10,7 @@ cb_profile() {
   CB_DEFAULT_SKIP_PERMISSIONS=1
   CB_DEFAULT_CONCURRENCY=""
   CB_DEFAULT_FAST=""
-  CB_LUNA_MODEL=gpt-5.6-luna
+  CB_LUNA_MODEL=gpt-6-luna
   CB_TERRA_MODEL=gpt-5.6-terra
   CB_SUBAGENT_TIER=fast
   CB_AUTH_PREFIX=""
@@ -24,7 +24,7 @@ cb_profile() {
       ;;
     deepseek)
       CB_PREFIX=DEEPSEEK; CB_ENV=DEEPSEEK_ANTHROPIC_AUTH_TOKEN; CB_SERVICE=deepseek-claude-code
-      CB_DEFAULT_MODEL='deepseek-v4-flash[1m]'; CB_DEFAULT_FAST=deepseek-v4-flash
+      CB_DEFAULT_MODEL='deepseek-flash[1m]'; CB_DEFAULT_FAST=deepseek-flash
       CB_DEFAULT_URL=https://api.deepseek.com/anthropic
       CB_AUTH_HEADER=Authorization; CB_AUTH_PREFIX='Bearer '
       ;;
@@ -37,7 +37,7 @@ cb_profile() {
       ;;
     claudex)
       CB_PREFIX=CLAUDEX; CB_ENV=CLAUDEX_PROXY_KEY; CB_SERVICE=cliproxyapi-claudex
-      CB_DEFAULT_MODEL=gpt-5.6-sol; CB_DEFAULT_URL=http://127.0.0.1:8317
+      CB_DEFAULT_MODEL=gpt-6.1-sol; CB_DEFAULT_URL=http://127.0.0.1:8317
       CB_DEFAULT_CONTEXT=1050000; CB_DEFAULT_COMPACT=1050000
       CB_DEFAULT_CONCURRENCY=3; CB_SUBAGENT_TIER=main
       CB_AUTH_HEADER=Authorization; CB_AUTH_PREFIX='Bearer '

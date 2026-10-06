@@ -22,12 +22,14 @@ The installer creates symlinks; keep the checkout. Set up your own credentials i
 | Command | Backend | Default main model |
 |---|---|---|
 | `mimo-claude` | Xiaomi MiMo | `mimo-v2.6-pro[1m]` |
-| `deepseek-claude` | DeepSeek | `deepseek-v4-flash[1m]` |
+| `deepseek-claude` | DeepSeek | `deepseek-flash[1m]` (V4.1 Flash) |
 | `glm-claude` | Z.AI | `glm-5.3[1m]` |
-| `claudex` | Codex via CLIProxyAPI | `gpt-5.6-sol` |
-| `ask-backend` | MiMo / DeepSeek / GLM | Headless child session with default permission mode |
+| `claudex` | Codex via CLIProxyAPI | `gpt-6.1-sol` |
+| `ask-backend` | MiMo / DeepSeek / GLM | Selected backend's default model |
 
 Model availability and quotas depend on your account. `claudex` requires a separately configured CLIProxyAPI instance and Codex OAuth sign-in; see the [backend guide](docs/multi-backend-guide.md).
+
+Defaults last verified **2026-10-06** against [MiMo releases](https://mimo.mi.com/docs/en-US/updates/model), [DeepSeek model details](https://api-docs.deepseek.com/quick_start/pricing/), [Z.AI's current configuration](https://docs.z.ai/devpack/latest-model), and [OpenAI's GPT-6 guide](https://developers.openai.com/api/docs/guides/latest-model). `claudex --luna` selects `gpt-6-luna`; GPT-6 Astra is available through `--model gpt-6-astra` when your account provides it. Terra remains the legacy `gpt-5.6-terra` option.
 
 ```bash
 glm-claude --effort high
@@ -55,6 +57,8 @@ MiMo, DeepSeek, and `claudex` enable permission bypass by default. Restore promp
 ```
 
 API smoke tests make live requests to the configured endpoint. They share launcher model defaults, strip the client-side `[1m]` selector, and use provider-specific authentication. Requests have a 10-second connection timeout and a 60-second total timeout. Proxy diagnostics report the full model inventory and the selected model.
+
+GPT-6.1 Sol and Astra smoke requests use low reasoning effort because these models do not support reasoning `none`. Luna, legacy Codex models, and direct-backend smoke requests retain thinking-disabled requests.
 
 Credentials and active proxy configurations belong outside Git; see [`.gitignore`](.gitignore). HTTP credentials are supplied to curl through a file descriptor, not command-line headers. The proxy template still retains request-error logs; details are in the [backend guide](docs/multi-backend-guide.md#proxy-configuration).
 

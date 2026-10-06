@@ -24,7 +24,7 @@ class LocalAPI(unittest.TestCase):
         self.bin.mkdir()
         self.capture = self.work / "curl-argv.jsonl"
         self.requests = []
-        self.models = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-6.1-sol"]
+        self.models = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-6-luna", "gpt-6-astra", "gpt-6.1-sol"]
         self.inventory = None
         self.status = 200
         self.reply = {"content": [{"type": "text", "text": "ok"}]}
@@ -124,9 +124,9 @@ class LocalAPI(unittest.TestCase):
     def test_default_models_headers_and_payloads_for_all_backends(self):
         expected = {
             "mimo": ("mimo-v2.6-pro", "Api-Key", "test-http-key"),
-            "deepseek": ("deepseek-v4-flash", "Authorization", "Bearer test-http-key"),
+            "deepseek": ("deepseek-flash", "Authorization", "Bearer test-http-key"),
             "glm": ("glm-5.3", "X-Api-Key", "test-http-key"),
-            "claudex": ("gpt-5.6-sol", "Authorization", "Bearer test-http-key"),
+            "claudex": ("gpt-6.1-sol", "Authorization", "Bearer test-http-key"),
         }
         for backend, (model, header, credential) in expected.items():
             with self.subTest(backend=backend):
@@ -136,7 +136,11 @@ class LocalAPI(unittest.TestCase):
                 headers = {key.lower(): value for key, value in request["headers"].items()}
                 self.assertEqual(headers[header.lower()], credential)
                 self.assertEqual(request["body"]["model"], model)
-                self.assertEqual(request["body"]["thinking"], {"type": "disabled"})
+                if backend == "claudex":
+                    self.assertEqual(request["body"]["thinking"], {"type": "adaptive"})
+                    self.assertEqual(request["body"]["output_config"]["effort"], "low")
+                else:
+                    self.assertEqual(request["body"]["thinking"], {"type": "disabled"})
                 self.assertEqual(request["body"]["messages"], [{"role": "user", "content": "Reply with exactly: ok"}])
                 self.assertNotIn("test-http-key", result.stdout + result.stderr)
         for line in self.capture.read_text().splitlines():
@@ -160,17 +164,19 @@ class LocalAPI(unittest.TestCase):
                 self.assertEqual(self.post()["body"]["model"], native)
 
     def test_proxy_environment_and_explicit_selectors(self):
-        self.env["CLAUDEX_MODEL"] = "gpt-6.1-sol"
-        for flags, model in (((), "gpt-6.1-sol"), (("--luna",), "gpt-5.6-luna"),
+        self.env["CLAUDEX_MODEL"] = "gpt-6-astra"
+        for flags, model in (((), "gpt-6-astra"), (("--luna",), "gpt-6-luna"),
                              (("--terra",), "gpt-5.6-terra"), (("--model", "gpt-5.6-sol"), "gpt-5.6-sol")):
             with self.subTest(flags=flags):
                 result = self.run_script("scripts/test-api.sh", "claudex", *flags)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.post()["body"]["model"], model)
+                if model == "gpt-6-luna":
+                    self.assertEqual(self.post()["body"]["thinking"], {"type": "disabled"})
 
     def test_proxy_preflight_rejects_missing_and_malformed_models(self):
-        for inventory in ({"data": [{"id": "gpt-5.6-luna", "owner": "gpt-5.6-sol"}]},
-                          {"data": "gpt-5.6-sol"}, {"data": [{"id": "other\ngpt-5.6-sol"}]}):
+        for inventory in ({"data": [{"id": "gpt-6-luna", "owner": "gpt-6.1-sol"}]},
+                          {"data": "gpt-6.1-sol"}, {"data": [{"id": "other\ngpt-6.1-sol"}]}):
             with self.subTest(inventory=inventory):
                 self.inventory = inventory
                 self.requests.clear()
@@ -179,6 +185,25 @@ class LocalAPI(unittest.TestCase):
                 self.assertEqual([request["method"] for request in self.requests], ["GET"])
                 self.assertTrue("not listed" in result.stderr or "invalid model inventory" in result.stderr)
                 self.assertFalse(any(request["method"] == "POST" for request in self.requests))
+
+    def test_openai_inventory_envelope_keeps_native_request_model(self):
+        self.inventory = {"data": [{"id": "claude-fable-5-dd-los-1.6-tpg", "owned_by": "openai"}]}
+        result = self.run_script("scripts/test-api.sh", "claudex")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.post()["body"]["model"], "gpt-6.1-sol")
+        self.assertEqual(self.post()["body"]["output_config"]["effort"], "low")
+
+    def test_inventory_envelope_requires_exact_codec_and_provider(self):
+        for item in ({"id": "claude-fable-5-dd-los-1.6-tpg", "owned_by": "anthropic"},
+                     {"id": "claude-fable-5-dd-los-6.5-tpg", "owned_by": "openai"},
+                     {"id": "custom-gpt-6.1-sol", "owned_by": "openai"}):
+            with self.subTest(item=item):
+                self.inventory = {"data": [item]}
+                self.requests.clear()
+                result = self.run_script("scripts/test-api.sh", "claudex")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("not listed", result.stderr)
+                self.assertEqual([r["method"] for r in self.requests], ["GET"])
 
     def test_http_failures_do_not_report_success_or_print_credentials(self):
         self.status = 401

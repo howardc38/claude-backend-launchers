@@ -47,7 +47,14 @@ cb_check_model() {
   if ! ids="$(printf '%s' "$inventory" | cb_model_ids)"; then
     printf 'Proxy returned an invalid model inventory.\n' >&2; return 1
   fi
-  if ! printf '%s' "$inventory" | jq -e --arg model "$model" '.data | any(.[]; .id == $model)' >/dev/null 2>&1; then
+  # Some compatibility builds envelope OpenAI model names in this reversible
+  # inventory codec while accepting native IDs on /v1/messages. Match only the
+  # exact native ID or the known OpenAI-owned envelope, never arbitrary aliases.
+  if ! printf '%s' "$inventory" | jq -e --arg model "$model" '
+    ($model | explode | reverse | implode) as $reversed |
+    .data | any(.[]; .id == $model or
+      (.owned_by == "openai" and .id == ("claude-fable-5-dd-" + $reversed)))
+    ' >/dev/null 2>&1; then
     printf 'Model %s is not listed by the current CLIProxyAPI account.\n' "$model" >&2
     return 1
   fi

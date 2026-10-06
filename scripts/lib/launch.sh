@@ -27,9 +27,10 @@ cb_parse_args() {
       --sol|--big|--gpt-5.6-sol|--luna|--mini|--gpt-5.6-luna|--terra|--gpt-5.6-terra)
         if [[ "$CB_BACKEND" == claudex ]]; then
           case "$1" in
-            --sol|--big|--gpt-5.6-sol) CB_MODEL="$CB_DEFAULT_MODEL" ;;
-            --luna|--mini|--gpt-5.6-luna) CB_MODEL="$CB_LUNA_MODEL" ;;
-            --terra|--gpt-5.6-terra) CB_MODEL="$CB_TERRA_MODEL" ;;
+            --sol|--big) CB_MODEL="$CB_DEFAULT_MODEL" ;;
+            --luna|--mini) CB_MODEL="$CB_LUNA_MODEL" ;;
+            --terra) CB_MODEL="$CB_TERRA_MODEL" ;;
+            --gpt-5.6-sol|--gpt-5.6-luna|--gpt-5.6-terra) CB_MODEL="${1#--}" ;;
           esac
         else
           CB_ARGS+=("$1")

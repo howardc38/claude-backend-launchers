@@ -28,7 +28,7 @@ class Credentials(unittest.TestCase):
         self.fake("secret-tool", "exit 1")
         self.fake("pass", "exit 1")
         self.fake("claude", "exec python3 -c 'import os,json,sys; keys=[\"ANTHROPIC_MODEL\",\"ANTHROPIC_DEFAULT_HAIKU_MODEL\",\"CLAUDE_CODE_SUBAGENT_MODEL\",\"CLAUDE_CODE_EFFORT_LEVEL\",\"CLAUDE_CODE_MAX_CONTEXT_TOKENS\",\"CLAUDE_CODE_AUTO_COMPACT_WINDOW\",\"CLAUDE_CODE_DISABLE_1M_CONTEXT\",\"CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY\",\"CLAUDE_STREAM_IDLE_TIMEOUT_MS\",\"CLAUDE_CODE_USE_BEDROCK\",\"CLAUDE_CODE_USE_VERTEX\",\"CLAUDE_CODE_USE_FOUNDRY\",\"CLAUDE_CODE_USE_ANTHROPIC_AWS\",\"CLAUDE_CODE_USE_MANTLE\"]; print(json.dumps({\"token\":os.environ.get(\"ANTHROPIC_AUTH_TOKEN\"),\"model\":os.environ.get(\"ANTHROPIC_MODEL\"),\"env\":{k:os.environ.get(k) for k in keys},\"args\":sys.argv[1:]}))' \"$@\"")
-        self.fake("curl", 'printf \'{"data":[{"id":"gpt-5.6-sol"},{"id":"gpt-5.6-luna"}],"content":[{"type":"text","text":"OK"}]}\\n200\'')
+        self.fake("curl", 'printf \'{"data":[{"id":"gpt-6.1-sol"},{"id":"gpt-6-luna"},{"id":"gpt-5.6-sol"},{"id":"gpt-5.6-luna"}],"content":[{"type":"text","text":"OK"}]}\\n200\'')
 
     def fake(self, name, body):
         path = self.bin / name
@@ -212,13 +212,13 @@ class Credentials(unittest.TestCase):
 
     def test_proxy_model_flag_drives_preflight_and_subagents(self):
         self.env["CLAUDEX_PROXY_KEY"] = "test-proxy"
-        self.fake("curl", 'printf \'{"data":[{"id":"gpt-5.6-luna"}]}\\n200\'')
-        for flags in (("--model", "gpt-5.6-luna"), ("--model=gpt-5.6-luna",), ("--luna",)):
+        self.fake("curl", 'printf \'{"data":[{"id":"gpt-6-luna"}]}\\n200\'')
+        for flags in (("--model", "gpt-6-luna"), ("--model=gpt-6-luna",), ("--luna",)):
             result = self.run_script("claudex", *flags)
             self.assertEqual(result.returncode, 0, result.stderr)
             value = json.loads(result.stdout)
-            self.assertEqual(value["model"], "gpt-5.6-luna")
-            self.assertEqual(value["env"]["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-5.6-luna")
+            self.assertEqual(value["model"], "gpt-6-luna")
+            self.assertEqual(value["env"]["CLAUDE_CODE_SUBAGENT_MODEL"], "gpt-6-luna")
             self.assertEqual(value["args"].count("--model"), 1)
 
     def test_delimiter_preserves_literal_prompt_and_permission_flags(self):
@@ -226,7 +226,7 @@ class Credentials(unittest.TestCase):
         result = self.run_script("claudex", "-p", "--", "--luna", "--permission-mode", "default")
         self.assertEqual(result.returncode, 0, result.stderr)
         value = json.loads(result.stdout)
-        self.assertEqual(value["model"], "gpt-5.6-sol")
+        self.assertEqual(value["model"], "gpt-6.1-sol")
         self.assertEqual(value["args"][-5:], ["-p", "--", "--luna", "--permission-mode", "default"])
         self.assertIn("--dangerously-skip-permissions", value["args"])
         self.env["MIMO_ANTHROPIC_AUTH_TOKEN"] = "test-mimo"
@@ -256,8 +256,16 @@ class Credentials(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     value = json.loads(result.stdout)
                     self.assertEqual(value["env"]["CLAUDE_CODE_EFFORT_LEVEL"], "max")
-                    self.assertEqual(value["model"], "glm-5.3[1m]" if launcher == "glm-claude" else "gpt-5.6-sol")
+                    self.assertEqual(value["model"], "glm-5.3[1m]" if launcher == "glm-claude" else "gpt-6.1-sol")
                     self.assertEqual(value["args"][-2:], [option, text])
+
+    def test_version_specific_proxy_selectors_keep_their_named_model(self):
+        self.env["CLAUDEX_PROXY_KEY"] = "test-proxy"
+        for model in ("gpt-5.6-sol", "gpt-5.6-luna"):
+            with self.subTest(model=model):
+                result = self.run_script("claudex", "--" + model)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["model"], model)
 
     def test_nested_permission_defaults_ignore_opaque_values(self):
         self.env.update(MIMO_ANTHROPIC_AUTH_TOKEN="test-mimo", DEEPSEEK_ANTHROPIC_AUTH_TOKEN="test-deepseek",

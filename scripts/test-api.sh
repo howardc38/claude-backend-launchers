@@ -38,8 +38,14 @@ if [[ "$backend" == claudex ]]; then
   inventory="$(cb_http GET /v1/models)"
   cb_check_model "$CB_WIRE_MODEL" "$inventory"
 fi
-payload="$(jq -cn --arg model "$CB_WIRE_MODEL" '{model:$model,max_tokens:256,
-  stream:false,thinking:{type:"disabled"},messages:[{role:"user",content:"Reply with exactly: ok"}]}')"
+payload="$(jq -cn --arg model "$CB_WIRE_MODEL" --arg backend "$backend" '
+  {model:$model,max_tokens:256,stream:false,
+    messages:[{role:"user",content:"Reply with exactly: ok"}]} +
+  if $backend == "claudex" and
+    (($model | startswith("gpt-6.1-sol")) or ($model | startswith("gpt-6-astra")) or
+     ($model | startswith("claude-fable-5-dd-"))) then
+    {thinking:{type:"adaptive"},output_config:{effort:"low"}}
+  else {thinking:{type:"disabled"}} end')"
 response="$(cb_http POST /v1/messages "$payload")"
 if ! reply="$(printf '%s' "$response" | jq -er '[.content[]? | select(.type == "text") | .text] | join("\n") | select(length > 0)' 2>/dev/null)"; then
   printf 'Smoke test failed: response has no text content or invalid JSON.\n' >&2; exit 1
