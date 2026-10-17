@@ -44,7 +44,13 @@ Numeric overrides require positive decimal integers; `0`, `00`, and other all-ze
 
 ## Context window settings
 
-MiMo declares `1048576` tokens and compacts at `786432`; DeepSeek and GLM declare/compact at `1000000`; the Codex proxy declares/compacts at `1050000`.
+MiMo declares `1048576` tokens and compacts at `786432`; DeepSeek declares `1000000` and compacts at `786432`; GLM declares/compacts at `1000000`; the Codex proxy declares/compacts at `1050000`.
+
+DeepSeek's auto-compact default follows the [official Claude Code integration guide](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/), leaving room within its 1M context window. Override it per session with `DEEPSEEK_AUTO_COMPACT_WINDOW`; this does not change the model or context capacity:
+
+```bash
+DEEPSEEK_AUTO_COMPACT_WINDOW=524288 deepseek-claude
+```
 
 For unknown custom model IDs containing `[1m]`, Claude Code otherwise assumes a 1M window and ignores the context variable on its own. When the resolved window differs from 1M, the launcher also sets `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`, allowing the declared window to apply. The actual installed-Claude regression test checks a lowered MiMo window. IDs that resolve to recognized Claude models retain Claude Code's native context rules. See the [official context guide](https://code.claude.com/docs/en/model-config#correct-the-window-for-a-gateway-or-custom-model-id).
 

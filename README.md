@@ -41,6 +41,8 @@ ask-backend glm "compare these two approaches"
 
 Explicit `--model` and `--effort` flags override backend environment defaults. Use `--` before prompt text that resembles a launcher option. Detailed model mappings, transport safeguards, and overrides are in the [backend guide](docs/multi-backend-guide.md).
 
+DeepSeek keeps its 1M context window and defaults to an auto-compact window of `786432`, matching the [official Claude Code guide](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/). Override with `DEEPSEEK_AUTO_COMPACT_WINDOW` when needed.
+
 MiMo, DeepSeek, and `claudex` enable permission bypass by default. Restore prompts with `MIMO_SKIP_PERMISSIONS=0`, `DEEPSEEK_SKIP_PERMISSIONS=0`, or `CLAUDEX_SKIP_PERMISSIONS=0`. GLM keeps the default permission mode. `ask-backend` also defaults to normal permission checks; existing allow rules and hooks still apply, so it is not a read-only sandbox. Prompts and code go to the selected provider.
 
 ## Setup, diagnostics, and live API checks

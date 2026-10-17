@@ -122,6 +122,22 @@ class Credentials(unittest.TestCase):
         self.assertNotIn("test-secret-do-not-show", result.stdout + result.stderr)
         self.assertIn("value=hidden", result.stdout)
 
+    def test_deepseek_auto_compact_default_and_override(self):
+        self.env.update(DEEPSEEK_ANTHROPIC_AUTH_TOKEN="test-deepseek",
+                        CLAUDE_CODE_AUTO_COMPACT_WINDOW="900000")
+        entrypoints = (("deepseek-claude", ()), ("ask-backend", ("deepseek", "test")))
+        for override, expected in ((None, "786432"), ("524288", "524288")):
+            if override is not None:
+                self.env["DEEPSEEK_AUTO_COMPACT_WINDOW"] = override
+            for script, args in entrypoints:
+                with self.subTest(script=script, override=override):
+                    result = self.run_script(script, *args)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    value = json.loads(result.stdout)
+                    self.assertEqual(value["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], expected)
+                    self.assertEqual(value["env"]["CLAUDE_CODE_MAX_CONTEXT_TOKENS"], "1000000")
+                    self.assertEqual(value["model"], "deepseek-flash[1m]")
+
     def test_glm_model_effort_and_nested_settings(self):
         self.env.update(GLM_ANTHROPIC_AUTH_TOKEN="test-glm", CLAUDE_CODE_SUBAGENT_MODEL="parent-model", CLAUDE_CODE_EFFORT_LEVEL="low", API_TIMEOUT_MS="1")
         self.fake("claude", "exec python3 -c 'import os,json,sys; print(json.dumps({\"model\":os.environ[\"ANTHROPIC_MODEL\"],\"fast\":os.environ[\"ANTHROPIC_SMALL_FAST_MODEL\"],\"haiku\":os.environ[\"ANTHROPIC_DEFAULT_HAIKU_MODEL\"],\"subagent\":os.environ[\"CLAUDE_CODE_SUBAGENT_MODEL\"],\"effort\":os.environ[\"CLAUDE_CODE_EFFORT_LEVEL\"],\"context\":os.environ[\"CLAUDE_CODE_MAX_CONTEXT_TOKENS\"],\"timeout\":os.environ[\"API_TIMEOUT_MS\"],\"args\":sys.argv[1:]}))' \"$@\"")

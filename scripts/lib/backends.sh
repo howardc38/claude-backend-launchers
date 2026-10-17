@@ -26,6 +26,7 @@ cb_profile() {
       CB_PREFIX=DEEPSEEK; CB_ENV=DEEPSEEK_ANTHROPIC_AUTH_TOKEN; CB_SERVICE=deepseek-claude-code
       CB_DEFAULT_MODEL='deepseek-flash[1m]'; CB_DEFAULT_FAST=deepseek-flash
       CB_DEFAULT_URL=https://api.deepseek.com/anthropic
+      CB_DEFAULT_COMPACT=786432
       CB_AUTH_HEADER=Authorization; CB_AUTH_PREFIX='Bearer '
       ;;
     glm)
