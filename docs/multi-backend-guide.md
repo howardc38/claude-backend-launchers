@@ -2,6 +2,8 @@
 
 For installation and the command overview, see [README](../README.md). Linux/WSL credential-store and service setup is covered in the [Linux guide](linux.md).
 
+OpenCode Go has an isolated managed proxy, per-model effort rules, and model-specific context/output limits. See the [Go guide](opencode-go.md) for setup and switching; the fixed-default tables below describe the original four backends.
+
 ## Model and launch settings
 
 The canonical defaults are in [backends.sh](../scripts/lib/backends.sh). Launchers and API smoke tests use the same backend profile.

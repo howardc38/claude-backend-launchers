@@ -17,6 +17,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Install Claude Code using the [official instructions](https://code.claude.com/docs/en/setup). `install-launchers.sh` creates symlinks, so keep this checkout; commands use the updated scripts after `git pull`. The installer refuses to overwrite existing regular files.
 
+For OpenCode Go, also install Python 3.9+ and CLIProxyAPI 7.2.130+ (`cliproxyapi` or `cli-proxy-api` on PATH). `go-claude` starts an isolated proxy itself; it needs a Go API key rather than Codex OAuth. See the [Go setup and effort guide](opencode-go.md).
+
 ## Linux desktop: Secret Service
 
 GNOME Keyring / KDE Wallet provides Secret Service. It requires a desktop D-Bus session and an unlocked keyring. Install the client on Ubuntu / Debian:
@@ -26,6 +28,7 @@ sudo apt-get install libsecret-tools
 ./scripts/setup-credential.sh mimo secret-service
 ./scripts/setup-credential.sh deepseek secret-service
 ./scripts/setup-credential.sh glm secret-service
+./scripts/setup-credential.sh go secret-service
 ```
 
 Each command reads the key with terminal echo disabled and saves it directly to the keyring. Then run:
@@ -46,9 +49,10 @@ pass init 'YOUR_GPG_KEY_ID_OR_FINGERPRINT'
 ./scripts/setup-credential.sh mimo pass
 ./scripts/setup-credential.sh deepseek pass
 ./scripts/setup-credential.sh glm pass
+./scripts/setup-credential.sh go pass
 ```
 
-`pass` encrypts credentials with GPG. Default entries are `claude-backends/mimo`, `claude-backends/deepseek`, `claude-backends/glm`, and `claude-backends/claudex`. GPG may require unlocking; in an interactive SSH session, set `export GPG_TTY="$(tty)"`. For CI or unattended jobs, inject dedicated environment variables through a secret manager to avoid waiting for an unlock prompt.
+`pass` encrypts credentials with GPG. Default entries are `claude-backends/mimo`, `claude-backends/deepseek`, `claude-backends/glm`, `claude-backends/claudex`, and `claude-backends/go`. GPG may require unlocking; in an interactive SSH session, set `export GPG_TTY="$(tty)"`. For CI or unattended jobs, inject dedicated environment variables through a secret manager to avoid waiting for an unlock prompt.
 
 If both credential stores are installed, select one explicitly. This setting contains no secret and can go in your shell configuration:
 
@@ -67,9 +71,9 @@ mimo-claude
 unset MIMO_ANTHROPIC_AUTH_TOKEN
 ```
 
-The other dedicated variables are `DEEPSEEK_ANTHROPIC_AUTH_TOKEN`, `GLM_ANTHROPIC_AUTH_TOKEN`, and `CLAUDEX_PROXY_KEY`. CI secret managers can inject these directly.
+The other dedicated variables are `DEEPSEEK_ANTHROPIC_AUTH_TOKEN`, `GLM_ANTHROPIC_AUTH_TOKEN`, `CLAUDEX_PROXY_KEY`, and `OPENCODE_GO_API_KEY`. CI secret managers can inject these directly.
 
-Lookup order: backend-specific environment variable → OS store (macOS Keychain or Linux desktop Secret Service) → `pass` → legacy standalone Anthropic environment variables. `CLAUDE_BACKEND_CREDENTIAL_STORE=env` skips stores; `keychain`, `secret-service`, and `pass` select a single store. Backend-specific environment variables always take priority. `claudex` only accepts its own client key and never reads generic Anthropic credentials.
+Lookup order: backend-specific environment variable → OS store (macOS Keychain or Linux desktop Secret Service) → `pass` → legacy standalone Anthropic environment variables. `CLAUDE_BACKEND_CREDENTIAL_STORE=env` skips stores; `keychain`, `secret-service`, and `pass` select a single store. Backend-specific environment variables always take priority. `claudex` and Go only accept their own credentials and never read generic Anthropic credentials.
 
 Customize `MIMO_PASS_ENTRY` (or the corresponding `DEEPSEEK_`, `GLM_`, or `CLAUDEX_` variable) and `CLAUDE_BACKEND_CREDENTIAL_ACCOUNT` as needed. Existing `*_KEYCHAIN_SERVICE` variables also set the Secret Service `service` attribute. Use the generic setup command; removed legacy aliases are listed in the [migration table](../README.md#migration-removed-script-paths).
 
@@ -114,7 +118,7 @@ Running the proxy in the foreground helps with initial verification. For a persi
 
 Diagnostics show the credential source, service, and `value=hidden`; they never print key characters or raw store errors. Lookup failures include a store/exit-code summary so you can check entry existence, keyring unlock, or GPG decryption. Configure your own key on Linux; macOS Keychain credentials do not transfer with a Git clone. Each host can use a separate key for easier revocation.
 
-MiMo, DeepSeek, and `claudex` retain their default permission bypass unless you disable it. `ask-backend` explicitly selects Claude Code's default permission mode and only enables bypass when requested. Existing permission rules and project hooks still apply; default permission mode does not guarantee read-only execution.
+MiMo, DeepSeek, `claudex`, and `go-claude` default to permission bypass unless you disable it. For Go, use `OPENCODE_GO_SKIP_PERMISSIONS=0` or `--permission-mode default` to restore checks. `ask-backend` explicitly selects Claude Code's default permission mode and only enables bypass when requested. Existing permission rules and project hooks still apply; default permission mode does not guarantee read-only execution.
 
 ## Tests
 
