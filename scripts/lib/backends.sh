@@ -43,6 +43,13 @@ cb_profile() {
       CB_DEFAULT_CONCURRENCY=3; CB_SUBAGENT_TIER=main
       CB_AUTH_HEADER=Authorization; CB_AUTH_PREFIX='Bearer '
       ;;
+    go)
+      CB_PREFIX=OPENCODE_GO; CB_ENV=OPENCODE_GO_API_KEY; CB_SERVICE=opencode-go-claude
+      CB_DEFAULT_MODEL=glm-5.3; CB_DEFAULT_URL=https://opencode.ai/inference/go
+      CB_DEFAULT_CONTEXT=1000000; CB_DEFAULT_COMPACT=750000
+      CB_DEFAULT_SKIP_PERMISSIONS=1; CB_SUBAGENT_TIER=main
+      CB_AUTH_HEADER=Authorization; CB_AUTH_PREFIX='Bearer '
+      ;;
     *) printf 'Unknown backend: %s\n' "$1" >&2; return 2 ;;
   esac
 }
@@ -115,11 +122,15 @@ cb_refresh_models() {
   local subagent_default="$CB_FAST_MODEL"
   [[ "$CB_SUBAGENT_TIER" != main ]] || subagent_default="$CB_MODEL"
   cb_setting CB_SUBAGENT_MODEL SUBAGENT_MODEL "$subagent_default"
-  if [[ "$CB_BACKEND" == claudex ]]; then
+  if [[ "$CB_BACKEND" == claudex || "$CB_BACKEND" == go ]]; then
     CB_FAST_MODEL="$CB_MODEL"; CB_SUBAGENT_MODEL="$CB_MODEL"
   fi
   cb_validate_model "$CB_MODEL" || return $?
   cb_validate_model "$CB_FAST_MODEL" || return $?
   cb_validate_model "$CB_SUBAGENT_MODEL" || return $?
   CB_WIRE_MODEL="$(cb_api_model "$CB_MODEL")"
+  if [[ "$CB_BACKEND" == go ]]; then
+    source "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/opencode-go.sh"
+    cb_go_resolve || return $?
+  fi
 }

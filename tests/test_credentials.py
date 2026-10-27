@@ -19,7 +19,7 @@ class Credentials(unittest.TestCase):
         self.bin.mkdir()
         self.env = dict(os.environ)
         for key in list(self.env):
-            if key.startswith(("ANTHROPIC_", "MIMO_", "DEEPSEEK_", "GLM_", "CLAUDEX_", "CLAUDE_BACKEND_")):
+            if key.startswith(("ANTHROPIC_", "MIMO_", "DEEPSEEK_", "GLM_", "CLAUDEX_", "OPENCODE_GO_", "CLAUDE_BACKEND_")):
                 self.env.pop(key)
         self.env.update(PATH=str(self.bin) + ":" + os.environ["PATH"],
                         DBUS_SESSION_BUS_ADDRESS="test-bus")
@@ -190,7 +190,7 @@ class Credentials(unittest.TestCase):
 
     def test_generic_setup_supports_each_backend(self):
         self.fake("pass", 'cat >/dev/null')
-        for backend in ("mimo", "deepseek", "glm", "claudex"):
+        for backend in ("mimo", "deepseek", "glm", "claudex", "go"):
             with self.subTest(backend=backend):
                 result = self.run_script("scripts/setup-credential.sh", backend, "pass", input="test-input-key\n")
                 self.assertEqual(result.returncode, 0, result.stderr)

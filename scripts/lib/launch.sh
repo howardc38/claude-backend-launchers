@@ -85,12 +85,16 @@ cb_prepare_environment() {
   export CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1
   [[ -z "$CB_CONCURRENCY" ]] || export CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY="$CB_CONCURRENCY"
   export ANTHROPIC_AUTH_TOKEN="$CB_TOKEN"
-  if [[ "$CB_BACKEND" == claudex ]]; then
+  if [[ "$CB_BACKEND" == claudex || "$CB_BACKEND" == go ]]; then
     unset ANTHROPIC_API_KEY
     export ENABLE_TOOL_SEARCH=false
   else
     export ANTHROPIC_API_KEY="$CB_TOKEN"
     unset ENABLE_TOOL_SEARCH
+  fi
+  if [[ "$CB_BACKEND" == go ]]; then
+    export CLAUDE_CODE_MAX_OUTPUT_TOKENS="$CB_GO_MAX_OUTPUT_TOKENS"
+    export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
   fi
 }
 
@@ -131,5 +135,8 @@ cb_exec_claude() {
   # Bash 3.2 with set -u cannot expand an empty array.
   if ((${#CB_ARGS[@]})); then command+=("${CB_ARGS[@]}"); fi
   unset CB_TOKEN
+  if [[ "$CB_BACKEND" == go ]]; then
+    exec python3 "$cb_launch_lib_dir/../opencode-go-proxy.py" -- "${command[@]}"
+  fi
   exec "${command[@]}"
 }

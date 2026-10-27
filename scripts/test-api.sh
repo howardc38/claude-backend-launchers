@@ -6,13 +6,17 @@ source "$script_dir/lib/credentials.sh"
 source "$script_dir/lib/http.sh"
 
 usage() {
-  printf 'Usage: %s mimo|deepseek|glm|claudex [--model ID|--sol|--luna|--terra]\n' "$0"
+  printf 'Usage: %s mimo|deepseek|glm|claudex|go [--model ID|--sol|--luna|--terra]\n' "$0"
+  printf '       %s go --all\n' "$0"
 }
 case "${1:-}" in
   -h|--help) usage; exit 0 ;;
   '') usage >&2; exit 2 ;;
 esac
 backend="$1"; shift
+if [[ "$backend" == go ]]; then
+  exec "$script_dir/test-go-api.sh" "$@"
+fi
 cb_settings "$backend"
 while (($#)); do
   case "$1" in

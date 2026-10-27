@@ -59,8 +59,8 @@ cb_load_auth() {
   elif [[ "$CB_STORE" != env ]]; then
     cb_read_store "$CB_STORE" && return 0
   fi
-  # Legacy standalone API environment support; never reuse it for claudex.
-  if [[ "$CB_BACKEND" != claudex ]]; then
+  # Proxy and Go credentials must never fall back to another provider's key.
+  if [[ "$CB_BACKEND" != claudex && "$CB_BACKEND" != go ]]; then
     for CB_SOURCE in ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY; do
       CB_TOKEN="${!CB_SOURCE:-}"
       [[ -z "$CB_TOKEN" ]] || return 0

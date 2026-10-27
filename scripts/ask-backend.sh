@@ -5,10 +5,10 @@ repo_dir="$(cd -P -- "$script_dir/.." && pwd)"
 source "$script_dir/lib/backends.sh"
 
 usage() {
-  printf 'Usage: ask-backend mimo|deepseek|glm <prompt> [extra Claude flags...]\n'
+  printf 'Usage: ask-backend mimo|deepseek|glm|go <prompt> [extra Claude flags...]\n'
   printf '       ask-backend --list\n\n'
   local backend
-  for backend in mimo deepseek glm; do
+  for backend in mimo deepseek glm go; do
     cb_profile "$backend"
     printf '  %-10s %s (%s)\n' "$backend" "$CB_DEFAULT_MODEL" "$CB_DEFAULT_URL"
   done
@@ -16,11 +16,11 @@ usage() {
 }
 case "${1:-}" in
   ''|-h|--help) usage; exit 0 ;;
-  --list) printf 'mimo\ndeepseek\nglm\n'; exit 0 ;;
+  --list) printf 'mimo\ndeepseek\nglm\ngo\n'; exit 0 ;;
 esac
 backend="$1"; shift
 case "$backend" in
-  mimo|deepseek|glm) ;;
+  mimo|deepseek|glm|go) ;;
   *) printf 'Unknown backend: %s\n' "$backend" >&2; usage >&2; exit 2 ;;
 esac
 [[ $# -ge 1 ]] || { printf 'Missing prompt.\n' >&2; usage >&2; exit 2; }
@@ -33,4 +33,6 @@ unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL ANTHROPIC_MODEL
 unset ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL
 unset ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL
 # Keep the prompt behind -- so selector-looking text stays literal.
-exec "$repo_dir/${backend}-claude" -p "$@" -- "$prompt" < /dev/null
+launcher="$repo_dir/${backend}-claude"
+[[ "$backend" != go ]] || launcher="$repo_dir/go-claude"
+exec "$launcher" -p "$@" -- "$prompt" < /dev/null
